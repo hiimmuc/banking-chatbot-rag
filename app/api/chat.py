@@ -14,14 +14,14 @@ class ChatRequest(BaseModel):
     provider: str | None = None
     model: str | None = None
     max_output_tokens: int = 1200
-    style: str = "concise"
+    style: str = config.DEFAULT_STYLE
     temperature: float | None = Field(default=0.2, ge=0, le=1)
 
 
-def _params(req: ChatRequest) -> ChatParams:
+def _params(req: ChatRequest, c: Container) -> ChatParams:
     """Clamp and allowlist everything: the client is untrusted."""
     key = req.provider or config.DEFAULT_PROVIDER
-    provider = config.PROVIDERS.get(key)
+    provider = c.providers.configs().get(key)
     if not provider:
         raise HTTPException(400, "Provider không hợp lệ")
     model = req.model or provider.models[0]
@@ -36,6 +36,6 @@ def chat(req: ChatRequest, c: Container = Depends(get_container)):
     if last.get("role") != "user" or not str(last.get("content", "")).strip():
         raise HTTPException(400, "Thiếu câu hỏi")
     history = [{"role": m["role"], "content": str(m["content"])[:4000]} for m in req.messages[:-1] if m.get("role") in ("user", "assistant")]
-    events = c.chat.answer(str(last["content"])[:2000], history, _params(req))
+    events = c.chat.answer(str(last["content"])[:2000], history, _params(req, c))
     return StreamingResponse((sse(e, d) for e, d in events), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

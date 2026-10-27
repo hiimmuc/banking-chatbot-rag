@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tra cứu văn bản</title>
+<title>Internal Chatbot</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/style.css">
 <script type="module" src="/app.js"></script>
@@ -14,8 +14,8 @@
     <button class="btn only-narrow" id="docsBtn" aria-label="Mở danh sách tài liệu">Tài liệu</button>
     <span id="logoSlot"></span>
     <div class="grow">
-      <h1>Tra cứu văn bản ngân hàng</h1>
-      <div class="sub">Trả lời dựa trên tài liệu đã tải lên, có trích dẫn nguồn</div>
+      <h1 id="appTitle">Internal Chatbot</h1>
+      <div class="sub">Hỏi đáp theo tài liệu đã tải lên, có dẫn nguồn</div>
     </div>
     <button class="btn" id="themeBtn" aria-label="Đổi giao diện sáng/tối">Sáng/Tối</button>
     <button class="btn" id="settingsBtn">Cài đặt</button>
@@ -27,7 +27,7 @@
     <div class="upload">
       <input type="file" id="file" class="sr" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg">
       <button class="btn block" id="uploadBtn">Tải tài liệu lên</button>
-      <p class="hint">PDF, DOCX, TXT, PNG, JPG. Tối đa 20 MB. PDF scan được OCR nên mất vài phút.</p>
+      <p class="hint">Định dạng cho phép: PDF, DOCX, TXT, PNG, JPG. Tối đa 20MB</p>
       <p class="err" id="uploadErr" role="alert" hidden></p>
     </div>
   </aside>
@@ -67,8 +67,17 @@
     <label for="sModel">Model</label><select id="sModel"></select>
     <label for="sTokens">Giới hạn độ dài trả lời (token)</label><input id="sTokens" type="number" min="100" step="50">
     <label for="sStyle">Phong cách</label>
-    <select id="sStyle"><option value="concise">Ngắn gọn</option><option value="detailed">Chi tiết</option></select>
+    <select id="sStyle"><option value="friendly">Tự nhiên &amp; thân thiện</option><option value="concise">Ngắn gọn</option><option value="detailed">Chi tiết</option></select>
     <label for="sTemp">Temperature (0 đến 1)</label><input id="sTemp" type="number" min="0" max="1" step="0.1">
+    <fieldset id="epBox" hidden>
+      <legend>Endpoint chat riêng</legend>
+      <label for="epUrl">URL (tương thích OpenAI)</label><input id="epUrl" placeholder="localhost:8000/v1" autocomplete="off">
+      <label for="epModel">Model (để trống để tự dò)</label><input id="epModel" placeholder="Model name e.g. Qwen/Qwen3.5-4B" autocomplete="off">
+      <label for="epKey">API key (nếu có)</label><input id="epKey" type="password" autocomplete="off">
+      <button class="btn" type="button" id="epAdd">Thêm endpoint</button>
+      <ul id="epList"></ul>
+      <p class="err" id="epErr" role="alert" hidden></p>
+    </fieldset>
     <p class="note">Lưu trên trình duyệt này. Không thể tắt yêu cầu bám nguồn.</p>
     <div class="actions"><button class="btn" value="cancel">Hủy</button><button class="btn primary" value="ok" id="sSave">Lưu</button></div>
   </form>

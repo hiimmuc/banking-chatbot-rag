@@ -2,7 +2,7 @@
 
 Trợ lý tra cứu tài liệu nghiệp vụ ngân hàng bằng tiếng Việt. Ưu tiên đơn giản, trả lời có căn cứ và cho phép kiểm tra nguồn.
 
-**Trạng thái:** thiết kế để triển khai; chưa phải phần mềm đã hoàn thành. Đọc [IMPLEMENTATION.md](IMPLEMENTATION.md) để thực hiện theo thứ tự.
+**Trạng thái:** tài liệu thiết kế ban đầu (Cloudflare Workers, D1, Vectorize). Bản đã triển khai là FastAPI + SQLite tự host, mô tả ở [README gốc](../README.md); hai bản khác nhau về stack. Mục thiết kế dưới đây chỉ để tham khảo. Đọc [IMPLEMENTATION.md](IMPLEMENTATION.md) để thực hiện theo thứ tự.
 
 ## 1. Scope
 

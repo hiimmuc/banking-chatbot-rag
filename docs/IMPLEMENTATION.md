@@ -1,5 +1,7 @@
 # Hướng dẫn implement — Banking Document RAG MVP
 
+> Ghi chú: đây là checklist của thiết kế ban đầu; bản đã triển khai (FastAPI + SQLite) xem [README gốc](../README.md).
+
 Đọc [README.md](README.md) trước. Tài liệu này là checklist xây dựng, chưa phải báo cáo đã triển khai. Thứ tự ưu tiên: làm một PDF scan chạy hết luồng trước, sau đó mở rộng định dạng và provider.
 
 ## 0. Chuẩn bị

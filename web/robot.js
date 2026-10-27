@@ -14,7 +14,8 @@ export const ROBOT = `<svg viewBox="0 0 140 150" aria-hidden="true" focusable="f
     <path class="hat-rib" d="M70 6 L48 54 M70 6 L70 57 M70 6 L92 54"/>
     <path class="strap" d="M36 55 L38 90 M104 55 L102 90"/><g class="tassel"><circle cx="38" cy="93" r="3.4"/><circle cx="102" cy="93" r="3.4"/></g>
     <circle class="tip" cx="70" cy="7" r="5"/>
-  </g></g></svg>`;
+  </g>
+  <g class="thought"><circle cx="113" cy="40" r="2.4"/><circle cx="121" cy="29" r="3.4"/><circle cx="128" cy="14" r="6"/></g></g></svg>`;
 
 import { $ } from './util.js';
 
@@ -23,7 +24,7 @@ export const QUIPS = ['Dạ, em chào anh/chị ạ! Em giúp anh/chị tra cứ
   'Dạ, nếu có nhiều văn bản sửa đổi nhau, em sẽ nêu từng văn bản kèm ngày ban hành ạ.',
   'Anh/chị cần hỏi gì về lãi suất, điều kiện hay thời hạn vay ạ?'];
 
-const STATUS = {idle: 'Dạ, em sẵn sàng ạ', typing: 'Dạ, em đang đọc câu hỏi ạ…', think: 'Dạ, em đang tìm trong tài liệu…',
+const STATUS = {idle: 'Dạ, em sẵn sàng ạ', typing: 'Dạ, em đang đọc câu hỏi ạ…', think: 'Em đang suy nghĩ…',
   talk: 'Em đang soạn câu trả lời ạ…', happy: 'Dạ, xong rồi ạ. Anh/chị bấm [S1] để xem nguồn.',
   oops: 'Dạ, em gặp lỗi, anh/chị xem thông báo giúp em ạ.', hello: 'Dạ, em chào anh/chị ạ'};
 

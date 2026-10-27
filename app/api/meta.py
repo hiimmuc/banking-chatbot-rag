@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from .. import config
+from ..container import Container, get_container
 
 router = APIRouter()
 
@@ -11,11 +12,12 @@ def health():
 
 
 @router.get("/config")
-def public_config():
+def public_config(c: Container = Depends(get_container)):
     """Names and limits only: endpoints, keys and file paths never leave the server."""
     return {"default_provider": config.DEFAULT_PROVIDER, "max_output_tokens_cap": config.MAX_OUTPUT_TOKENS_CAP,
             "styles": list(config.STYLES), "max_upload_mb": config.MAX_UPLOAD_MB,
-            "providers": {k: {"label": p.label, "models": list(p.models)} for k, p in config.PROVIDERS.items()}}
+            "customEndpoints": config.ALLOW_CUSTOM_ENDPOINTS,
+            "providers": {k: {"label": p.label, "models": list(p.models), "custom": c.providers.is_custom(k)} for k, p in c.providers.configs().items()}}
 
 
 @router.get("/branding")

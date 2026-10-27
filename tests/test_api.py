@@ -162,3 +162,9 @@ def test_static_js_has_no_inline_handlers_or_styles():
     web = pathlib.Path(config.WEB_DIR)
     html = (web / "index.html").read_text(encoding="utf-8")
     assert "style=" not in html and " onclick=" not in html and "<style" not in html
+
+
+def test_custom_endpoints_are_off_by_default_and_config_flags_it(client):
+    assert client.get("/api/config").json()["customEndpoints"] is False
+    assert client.post("/api/endpoints", json={"url": "127.0.0.1:8008", "models": ["m"]}).status_code == 403
+    assert client.delete("/api/endpoints/ep-x").status_code == 403

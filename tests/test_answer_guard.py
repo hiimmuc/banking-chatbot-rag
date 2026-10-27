@@ -1,4 +1,4 @@
-from app.answer_guard import has_valid_citation, split_tag, unverified_numbers
+from app.answer_guard import audit, split_tag, strip_placeholders, unverified_numbers
 
 CTX = "lãi suất cho vay ưu đãi là 6%/năm, văn bản 549/NHNo.TH ngày 12/02/2026, 1,25%"
 
@@ -23,6 +23,11 @@ def test_date_spelled_out_in_source():
 
 
 def test_citation_must_reference_a_real_source():
-    assert has_valid_citation("x [S2]", 3)
-    assert not has_valid_citation("x [S4]", 3)
-    assert not has_valid_citation("x", 3)
+    assert audit("x [S2]", "", 3) == []
+    assert audit("x [S4]", "", 3) and "S4" in audit("x [S1] [S4]", "", 3)[0]
+    assert "trích dẫn" in audit("x", "", 3)[0]
+
+
+def test_placeholders_are_stripped_but_comparisons_stay():
+    assert strip_placeholders("<kết luận> Khoản vay [S1]") == "Khoản vay [S1]"
+    assert strip_placeholders("Lãi suất < 6% và > 4% [S1]") == "Lãi suất < 6% và > 4% [S1]"

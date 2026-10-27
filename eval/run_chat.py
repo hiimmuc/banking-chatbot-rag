@@ -5,10 +5,11 @@ from app.textnorm import fold
 import os
 BASE = os.environ.get("BASE", "http://localhost:8080"); AUTH = (os.environ["APP_USER"], os.environ["APP_PASSWORD"]) if os.environ.get("APP_PASSWORD") else None
 provider = sys.argv[1] if len(sys.argv) > 1 else "qwen"
+model = sys.argv[2] if len(sys.argv) > 2 else None
 qs = json.load(open(pathlib.Path(__file__).with_name("questions.json")))
 def ask(q):
     ev, data = None, {"text": "", "mode": None, "sources": [], "verify": [], "error": None, "top": None, "versions": []}
-    with httpx.stream("POST", f"{BASE}/api/chat", auth=AUTH, json={"messages": [{"role": "user", "content": q}], "provider": provider, "max_output_tokens": 800}, timeout=300) as r:
+    with httpx.stream("POST", f"{BASE}/api/chat", auth=AUTH, json={"messages": [{"role": "user", "content": q}], "provider": provider, "model": model, "max_output_tokens": 800}, timeout=300) as r:
         if r.status_code != 200:
             raise SystemExit(f"HTTP {r.status_code}: set APP_USER/APP_PASSWORD if the server has auth on")
         for line in r.iter_lines():

@@ -24,10 +24,16 @@ Bản triển khai này chạy **local** (FastAPI + SQLite). Thiết kế gốc 
 
 - Nạp PDF (kể cả bản scan), DOCX, TXT, PNG, JPG; tài liệu mới dùng được ngay, không cần khởi động lại.
 - Tìm kiếm lai: FTS5 (từ khóa, không dấu) + vector `bge-m3` → RRF → rerank `bge-reranker-v2-m3`.
-- Chat streaming (SSE). Mỗi câu trả lời mở đầu bằng một chế độ: `answer`, `clarify` (hỏi lại), `insufficient` (chưa đủ căn cứ).
+- Chat qua SSE. Mỗi câu trả lời có một chế độ: `answer`, `clarify` (hỏi lại), `insufficient` (chưa đủ căn cứ), `offscope` (ngoài phạm vi), `chitchat` (câu cố định). Server giữ câu trả lời đến khi qua kiểm tra rồi gửi một lần; giao diện hiện dần từng cụm chữ.
+- Ba phong cách trả lời trong Cài đặt: Tự nhiên & thân thiện (mặc định, xưng "em", gọi "anh/chị"), Ngắn gọn, Chi tiết. Câu nhiều ý trình bày bằng gạch đầu dòng, mỗi ý kèm nguồn.
+- Câu hỏi không phải tra cứu nghiệp vụ (trừ chào hỏi, giới thiệu) nhận câu cố định "Em chưa được thiết lập để trả lời câu hỏi này".
+- Mỗi câu trả lời hiện số token vào/ra khi model báo.
+- Tốc độ: ma trận embedding cache trong bộ nhớ, embedder và reranker nạp sẵn khi khởi động.
 - **Văn bản sửa đổi/thay thế:** khi câu hỏi liên quan một nhóm văn bản sửa đổi nhau (ví dụ 66 → 549 → 955 → 1866), hệ thống kéo thêm đoạn của các phiên bản bị bỏ sót, gắn nhãn `MỚI NHẤT`/`CŨ HƠN` cho model, yêu cầu kết luận theo bản mới nhất rồi nêu "Trước đây, …" để so sánh, và luôn hiện khung "Có nhiều phiên bản liên quan" (mới nhất trước, bấm mở từng bản) do server dựng, không phụ thuộc model.
 - Trích dẫn kiểm tra phía server: mã `[Sx]` không có trong danh sách nguồn không thành liên kết; bấm mở đoạn trích và PDF đúng trang.
-- Hai chốt chính xác: cảnh báo khi câu trả lời **không có trích dẫn** hoặc chứa **số không có trong nguồn**.
+- Chốt chính xác: câu trả lời được giữ lại đến khi qua kiểm tra (trích dẫn hợp lệ, mọi số có trong nguồn, không còn chữ mẫu `<...>`). Không qua thì sinh lại một lần; vẫn không qua thì hệ thống nêu lý do và hỏi lại một câu cụ thể thay vì đưa câu trả lời chưa kiểm chứng.
+- Câu chào hỏi, cảm ơn, hỏi về trợ lý được trả lời cố định, không tra cứu. Có thể bật thêm model phân loại ý định (`INTENT_*`) để chặn câu ngoài phạm vi và câu quá chung chung.
+- Thêm endpoint chat riêng (vLLM/OpenAI-compatible) ngay trong Cài đặt khi `ALLOW_CUSTOM_ENDPOINTS=1`.
 - Nhiều nhà cung cấp chat qua một adapter OpenAI-compatible: Qwen (vLLM local), Gemini, OpenAI. Nhà cung cấp chưa có key tự ẩn khỏi giao diện; server kiểm tra allowlist.
 - OCR chọn được: MinerU (local, mặc định) hoặc Gemini (`OCR_BACKEND=gemini`).
 - Thương hiệu (tên tổ chức, logo, thông tin tác giả) đọc từ `.env`, repo không chứa danh tính; để trống thì hiện chỗ đặt logo trung tính.
@@ -72,7 +78,10 @@ app/
 ├── embedding.py       # Embedder, Reranker (tải lười)
 ├── llm.py             # OpenAICompatProvider, ChatError
 ├── prompt.py          # system prompt và dựng messages
-├── answer_guard.py    # thẻ chế độ, kiểm tra số, kiểm tra trích dẫn
+├── answer_guard.py    # thẻ chế độ, kiểm tra số/trích dẫn, bỏ chữ mẫu
+├── intent.py          # luật + model phân loại ý định
+├── smalltalk.py       # câu trả lời cố định cho chào hỏi
+├── providers.py       # provider tích hợp + endpoint thêm từ Cài đặt
 ├── metadata.py        # số hiệu/ngày ban hành
 └── textnorm.py        # bỏ dấu, escape truy vấn FTS
 web/                   # index.html, style.css, app.js, api.js, robot.js, util.js, config.js (không inline script/style)
@@ -124,17 +133,20 @@ Sao chép `.env.example` thành `.env` (đã nằm trong `.gitignore`, cùng `pr
 | `BRAND_LOGO_HEADER`, `BRAND_LOGO_FOOTER_LIGHT`, `BRAND_LOGO_FOOTER_DARK` | – | Đường dẫn logo png/webp/jpg (không nhận SVG) |
 | `CHAT_PROVIDER` | `qwen` | Provider mặc định: `qwen`, `gemini`, `openai` |
 | `QWEN_BASE_URL` | `http://127.0.0.1:8000/v1` | Endpoint vLLM |
-| `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL` | –, `gpt-4.1-mini` | OpenAI |
+| `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL` | –, `gpt-4.1-mini` | OpenAI; model là danh sách phân tách bằng dấu phẩy, mục đầu là mặc định. Eval 14 câu: `gpt-4.1-mini` 13/14, `gpt-5.4-mini` 13/14, `gpt-5.4-nano` 12/14 |
 | `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL` | –, `gemini-3.5-flash` | Gemini chat (endpoint OpenAI-compatible) |
 | `OCR_BACKEND`, `GEMINI_OCR_MODEL` | `mineru`, `gemini-3.5-flash` | OCR; `gemini` gửi ảnh trang lên Google |
 | `APP_PASSWORD`, `APP_USER` | –, `admin` | Bật đăng nhập khi đặt `APP_PASSWORD` (curl/eval dùng được Basic với `APP_USER`) |
 | `APP_SECRET` | suy ra từ mật khẩu | Khóa ký token phiên và link tài liệu |
 | `ALLOWED_ORIGINS` | – | Origin của giao diện host riêng (Pages), cách nhau bằng dấu phẩy; trống = chỉ cùng origin |
 | `TRUST_PROXY` | `0` | `1` sau Cloudflare/nginx để giới hạn tốc độ theo IP thật |
+| `LLM_TIMEOUT` | `15` | Giây chờ model không trả byte nào thì báo lỗi "Model phản hồi quá lâu". Model lớn hoặc ở xa có thể cần tăng |
+| `ALLOW_CUSTOM_ENDPOINTS` | `0` | `1` cho phép thêm/xóa endpoint chat trong Cài đặt (lưu ở `data/endpoints.json`, mode 600). Server sẽ gọi URL được nhập, nên chỉ bật trong mạng tin cậy và nên đặt `APP_PASSWORD`. Chặn địa chỉ link-local/metadata; không theo redirect khi dò model |
+| `INTENT_BASE_URL`, `INTENT_MODEL`, `INTENT_API_KEY` | trống | Model nhỏ (OpenAI-compatible) gán nhãn `chitchat`/`out_of_scope`/`vague`/`domain` trước khi tìm kiếm. Trống thì chỉ dùng luật cố định. Lỗi model thì coi như `domain` |
 | `RAG_DEVICE` | `cuda` | `cpu` để chạy embedding/rerank không GPU |
 | `EMBED_MODEL`, `RERANK_MODEL` | `BAAI/bge-m3`, `BAAI/bge-reranker-v2-m3` | Đổi embedding thì phải nạp lại |
 
-Tham số tìm kiếm (top-k) ở `config.RETRIEVAL`. Client không gửi được URL hay key; `/api/config` chỉ trả tên, giới hạn và thương hiệu.
+Tham số tìm kiếm (top-k) ở `config.RETRIEVAL`. Client chỉ chọn provider/model trong allowlist (kể cả endpoint đã thêm); key không bao giờ trả về client; `/api/config` chỉ trả tên, giới hạn và thương hiệu.
 
 ## Chạy
 
@@ -162,8 +174,9 @@ Bước OCR chỉ cần một lần (cache ở `data/ocr/`, MinerU khoảng 30 g
 | GET | `/api/documents/{id}/link` | URL ký sẵn, sống 10 phút, chỉ cho đúng tài liệu đó |
 | GET | `/api/documents/{id}/file` | File gốc, hỗ trợ range (cần token phiên hoặc link ký) |
 | POST | `/api/chat` | Hỏi đáp, trả SSE |
+| POST / DELETE | `/api/endpoints`, `/api/endpoints/{key}` | Thêm/xóa endpoint chat (cần `ALLOW_CUSTOM_ENDPOINTS=1`) |
 
-Mọi route `/api` trừ `health`, `branding`, `login`, `brand/*` cần `Authorization: Bearer <token>` (hoặc Basic cho script). Sự kiện SSE theo thứ tự: `sources` → `mode` → `delta`* → `verify`* → `done`, hoặc `error`.
+Mọi route `/api` trừ `health`, `branding`, `login`, `brand/*` cần `Authorization: Bearer <token>` (hoặc Basic cho script). Sự kiện SSE theo thứ tự: `status`* → `sources`? → `mode` → `delta` → `done`, hoặc `error`. Câu trả lời được gửi một lần sau khi qua kiểm tra, không stream từng token.
 
 ```bash
 curl -N -H 'content-type: application/json' \
@@ -258,6 +271,7 @@ Kiểm tra sau triển khai: `curl https://<api>/api/health` (200), `/api/docume
 - Chốt số chỉ bắt số **không có trong nguồn**; không bắt được con số đúng nhưng gắn sai điều kiện.
 - Quan hệ sửa đổi suy ra từ tiêu đề: văn bản có "sửa đổi/điều chỉnh/gia hạn/bổ sung/thay thế" trong tiêu đề, ban hành sau và cùng chủ đề (độ trùng từ ≥ 0,6) với văn bản trước. Chưa đọc nội dung "thay thế văn bản số …" nên văn bản chỉ sửa một phần vẫn được coi là bản mới nhất của cả nhóm. Hệ thống không khẳng định văn bản nào còn hiệu lực.
 - Qwen 2B đôi khi vẫn đảo thứ tự cũ/mới trong câu trả lời (câu #7); khung phiên bản do server dựng luôn đúng thứ tự.
+- Khi câu trả lời không qua kiểm tra, hệ thống hỏi lại thay vì trả lời, nên số câu "hỏi lại" tăng với model yếu (eval: #7 giờ hỏi lại thay vì trả sai). Model phân loại ý định (`INTENT_*`) và endpoint tùy chỉnh mới kiểm thử bằng mock và vLLM local, chưa chạy với model thật khác.
 - Trích dẫn ở mức trang, chưa tô sáng vùng chữ. DOCX, ảnh chưa kiểm tra đầu-cuối.
 - Chưa có xóa tài liệu và đăng nhập theo người dùng. Gemini OCR đã có mã và kiểm thử bằng mock, chưa chạy với key thật.
 

@@ -77,6 +77,7 @@ main{display:flex;flex-direction:column;min-height:0;min-width:0}
 .cite{background:none;border:1px solid var(--brand);color:var(--brand);border-radius:4px;padding:0 5px;margin:0 1px;font-size:12.5px;line-height:1.5;min-height:24px;vertical-align:baseline}
 .cite:hover{background:var(--btn);border-color:var(--btn);color:var(--btn-ink)}
 .msg[data-mode=clarify] .body::before,.msg[data-mode=insufficient] .body::before{display:inline-block;font-size:12.5px;border:1px solid currentColor;border-radius:4px;padding:0 6px;margin-bottom:6px;color:var(--warn)}
+.msg[data-mode=chitchat] .srcs,.msg[data-mode=chitchat] .vers,.msg[data-mode=offscope] .srcs,.msg[data-mode=offscope] .vers{display:none}
 .msg[data-mode=clarify] .body::before{content:"Cần làm rõ"}
 .msg[data-mode=insufficient] .body::before{content:"Chưa đủ căn cứ"}
 .srcs{margin-top:8px;font-size:13px;color:var(--muted)}
@@ -108,6 +109,10 @@ dialog h2{margin:0 0 12px;font-size:17px}
 dialog label{display:block;margin:12px 0 4px;font-size:14px}
 dialog select,dialog input{width:100%;padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);min-height:40px}
 dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+dialog fieldset{border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 0;padding:4px 12px 12px}
+dialog fieldset button{margin-top:10px}
+dialog fieldset ul{list-style:none;margin:10px 0 0;padding:0}
+dialog fieldset li{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;padding:4px 0}
 dialog .note{font-size:12.5px;color:var(--muted);margin:4px 0 0}
 
 .robot{display:inline-block;background:none;border:0;padding:0;color:inherit;line-height:0}
@@ -143,6 +148,14 @@ button.robot{cursor:pointer;border-radius:50%}
 .robot[data-state="hello"] .bot{animation:bow 1.3s ease-in-out 1}
 .robot[data-state="hello"] .arm-r{animation:wave .9s 2}
 .robot[data-state="typing"] .eyes{--ey:3;--ex:2}
+.thought{display:none;fill:#8f1b3a}
+.robot[data-state="think"] .thought{display:block}
+.robot[data-state="think"] .thought circle{animation:pop 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.robot[data-state="think"] .thought circle:nth-child(2){animation-delay:.2s}
+.robot[data-state="think"] .thought circle:nth-child(3){animation-delay:.4s}
+@keyframes pop{0%,100%{opacity:.25;transform:scale(.7)}40%{opacity:1;transform:scale(1.15)}}
+.msg.typing .srcs,.msg.typing .vers,.msg.typing .usage{visibility:hidden}
+.usage{margin-top:6px;font-size:12px;color:var(--muted)}.usage:empty{display:none}
 .robot[data-state="think"] .eyes{animation:scan .7s ease-in-out infinite alternate}
 .robot[data-state="think"] .head{animation:tilt 1.6s ease-in-out infinite}
 .robot[data-state="think"] .tip{animation:tipblink .8s steps(2) infinite}

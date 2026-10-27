@@ -1,5 +1,6 @@
 from typing import Iterator, Protocol
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+from . import config
 from .config import Provider
 
 _STATUS_MESSAGES = {401: "Sai hoặc thiếu API key", 402: "Hết hạn mức/tín dụng của nhà cung cấp", 403: "Không có quyền truy cập model",
@@ -30,7 +31,7 @@ class OpenAICompatProvider:
 
     def __init__(self, cfg: Provider):
         self._cfg = cfg
-        self._client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "EMPTY", timeout=120, max_retries=0)
+        self._client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "EMPTY", timeout=config.LLM_TIMEOUT, max_retries=0)
 
     def _kwargs(self, model, messages, max_tokens, temperature) -> dict:
         kw = {"model": model, "messages": messages, self._cfg.token_param: max_tokens}

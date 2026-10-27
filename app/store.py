@@ -38,6 +38,7 @@ class Store:
         self._db = sqlite3.connect(path, check_same_thread=False, timeout=30)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()  # one shared connection, shared by API and ingest threads
+        self._gen, self._emb = 0, None  # bumped by every write; the cached embedding matrix is valid for one generation
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.executescript(SCHEMA)
@@ -50,6 +51,7 @@ class Store:
         with self._lock:
             self._db.execute(sql, params)
             self._db.commit()
+            self._gen += 1
 
     def upsert_document(self, doc_id: str, name: str, title: str, mime: str, file_path: str) -> None:
         self._exec("INSERT INTO documents(id,name,title,mime,file_path) VALUES(?,?,?,?,?) "
@@ -78,12 +80,18 @@ class Store:
                                  (cid, doc_id, i, c.text, c.heading, c.page_start, c.page_end, c.embedding))
                 self._db.execute("INSERT INTO chunks_fts(chunk_id,text) VALUES(?,?)", (cid, c.fts_text))
             self._db.commit()
+            self._gen += 1
 
     def ready_embeddings(self) -> tuple[list[str], np.ndarray]:
-        rows = self._rows("SELECT c.id, c.embedding FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.status='ready'")
-        if not rows:
-            return [], np.empty((0, 0), dtype="float32")
-        return [r["id"] for r in rows], np.frombuffer(b"".join(r["embedding"] for r in rows), dtype="float32").reshape(len(rows), -1)
+        with self._lock:
+            if self._emb and self._emb[0] == self._gen:
+                return self._emb[1]
+            gen = self._gen
+            rows = self._rows("SELECT c.id, c.embedding FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.status='ready'")
+            result = ([r["id"] for r in rows], np.frombuffer(b"".join(r["embedding"] for r in rows), dtype="float32").reshape(len(rows), -1)) \
+                if rows else ([], np.empty((0, 0), dtype="float32"))
+            self._emb = (gen, result)
+            return result
 
     def keyword_search(self, match_query: str, k: int) -> list[str]:
         rows = self._rows("SELECT f.chunk_id FROM chunks_fts f JOIN chunks c ON c.id=f.chunk_id JOIN documents d ON d.id=c.document_id "
