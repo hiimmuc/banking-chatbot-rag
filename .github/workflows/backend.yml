@@ -1,0 +1,19 @@
+name: Deploy API (self-hosted runner)
+# Use only on a private repository: a self-hosted runner executes whatever the workflow says on your machine.
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "requirements.txt", "scripts/**", "tests/**"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux]
+    env:
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}   # repository variable: the checkout the systemd service runs from
+    steps:
+      - name: Pull
+        run: git -C "$DEPLOY_DIR" pull --ff-only
+      - name: Test
+        run: cd "$DEPLOY_DIR" && .venv/bin/python -m pytest -q
+      - name: Restart
+        run: systemctl --user restart rag-api && sleep 3 && curl -fsS http://127.0.0.1:8080/api/health

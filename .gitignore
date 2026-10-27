@@ -1,0 +1,29 @@
+# secrets / local config
+.env
+.env.*
+!.env.example
+private/
+
+# runtime data
+data/
+*.db
+*.db-*
+*.sqlite*
+*.log
+
+# environments / caches
+.venv/
+.venv-mineru/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+node_modules/
+
+# build output / tooling
+dist/
+.claude/
+.DS_Store
+
+# brand assets (identity stays out of the repo)
+docs/bo-logo-*

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tra cứu văn bản</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <button class="btn only-narrow" id="docsBtn" aria-label="Mở danh sách tài liệu">Tài liệu</button>
+    <span id="logoSlot"></span>
+    <div class="grow">
+      <h1>Tra cứu văn bản ngân hàng</h1>
+      <div class="sub">Trả lời dựa trên tài liệu đã tải lên, có trích dẫn nguồn</div>
+    </div>
+    <button class="btn" id="themeBtn" aria-label="Đổi giao diện sáng/tối">Sáng/Tối</button>
+    <button class="btn" id="settingsBtn">Cài đặt</button>
+  </header>
+
+  <aside id="docsPane" aria-label="Tài liệu">
+    <div class="head"><h2>Tài liệu</h2><button class="btn only-narrow" id="docsClose" aria-label="Đóng danh sách tài liệu">Đóng</button></div>
+    <ul class="docs" id="docs"><li class="doc"><span class="status">Đang tải danh sách<span class="dots"></span></span></li></ul>
+    <div class="upload">
+      <input type="file" id="file" class="sr" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg">
+      <button class="btn block" id="uploadBtn">Tải tài liệu lên</button>
+      <p class="hint">PDF, DOCX, TXT, PNG, JPG. Tối đa 20 MB. PDF scan được OCR nên mất vài phút.</p>
+      <p class="err" id="uploadErr" role="alert" hidden></p>
+    </div>
+  </aside>
+
+  <main>
+    <div class="thread" id="thread">
+      <div class="col" id="msgs"></div>
+    </div>
+    <form class="ask" id="ask">
+      <div class="dock" id="dock" hidden><span class="robot" id="dockBot" data-state="idle"></span><span id="botStatus" role="status" aria-live="polite">Dạ, em sẵn sàng ạ</span></div>
+      <div class="row">
+        <label for="q" class="sr">Câu hỏi</label>
+        <textarea id="q" rows="1" placeholder="Hỏi về lãi suất, điều kiện, thời hạn…" required></textarea>
+        <button class="btn" type="button" id="stop" hidden>Dừng</button>
+        <button class="btn primary" type="submit" id="send">Gửi</button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site" id="siteFooter" hidden>
+    <span id="footerLogos"></span>
+    <div class="author" id="author"></div>
+  </footer>
+
+  <section class="source" id="source" hidden aria-label="Nguồn trích dẫn">
+    <div class="head"><div class="grow" id="srcTitle"></div><button class="btn" id="srcClose">Đóng</button></div>
+    <div class="meta" id="srcMeta"></div>
+    <div class="excerpt" id="srcExcerpt"></div>
+    <iframe id="srcFrame" title="Văn bản gốc"></iframe>
+  </section>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h2>Cài đặt trả lời</h2>
+    <label for="sProvider">Nhà cung cấp</label><select id="sProvider"></select>
+    <label for="sModel">Model</label><select id="sModel"></select>
+    <label for="sTokens">Giới hạn độ dài trả lời (token)</label><input id="sTokens" type="number" min="100" step="50">
+    <label for="sStyle">Phong cách</label>
+    <select id="sStyle"><option value="concise">Ngắn gọn</option><option value="detailed">Chi tiết</option></select>
+    <label for="sTemp">Temperature (0 đến 1)</label><input id="sTemp" type="number" min="0" max="1" step="0.1">
+    <p class="note">Lưu trên trình duyệt này. Không thể tắt yêu cầu bám nguồn.</p>
+    <div class="actions"><button class="btn" value="cancel">Hủy</button><button class="btn primary" value="ok" id="sSave">Lưu</button></div>
+  </form>
+</dialog>
+<dialog id="login" aria-labelledby="loginTitle">
+  <form id="loginForm">
+    <h2 id="loginTitle">Đăng nhập</h2>
+    <label for="loginPw">Mật khẩu truy cập</label>
+    <input id="loginPw" type="password" autocomplete="current-password" required>
+    <p class="err" id="loginErr" role="alert" hidden></p>
+    <div class="actions"><button class="btn primary" type="submit">Vào</button></div>
+  </form>
+</dialog>
+</body>
+</html>

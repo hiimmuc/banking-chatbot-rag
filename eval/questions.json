@@ -1,0 +1,16 @@
+[
+ {"q":"Lãi suất cho vay người trẻ dưới 35 tuổi mua nhà ở xã hội trong 5 năm đầu là bao nhiêu?","docs":["4731KHTI"],"fact":"5,6%"},
+ {"q":"Lãi suất cho vay người trẻ dưới 35 tuổi mua nhà ở xã hội trong 10 năm vay tiếp theo là bao nhiêu?","docs":["4731KHTI"],"fact":"6,6%"},
+ {"q":"Chương trình Có vốn trong tay - Kinh doanh vững bền được gia hạn đến ngày nào?","docs":["955CNTI"],"fact":"30/06/2026"},
+ {"q":"Văn bản 1866 thay thế văn bản nào?","docs":["1866CNTI"],"fact":"549/NHNo.TH-KHCN"},
+ {"q":"Cho vay ngắn hạn mua máy móc thiết bị trong chương trình cơ giới hoá nông nghiệp tối đa bao nhiêu % giá trị hàng hóa?","docs":["1658CNTI"],"fact":"100%"},
+ {"q":"Cho vay trung hạn thực hiện dự án mua máy móc thiết bị được vay tối đa bao nhiêu % tổng nhu cầu vốn?","docs":["1658CNTI"],"fact":"75%"},
+ {"q":"Chính sách lãi suất cho vay và FTP bán VND đối với dư nợ trung dài hạn có hiệu lực đến khi nào sau điều chỉnh tháng 4/2026?","docs":["1028KHTI"],"fact":"31/10/2026","answer_facts":["31/10/2026","30/4/2026"],"expect_versions":["1028KHTI","214KHTI"]},
+ {"q":"Văn bản số 549 được ban hành ngày nào?","docs":["549CNTI"],"fact":"12/02/2026"},
+ {"q":"Chính sách khách hàng KHDN năm 2026 triển khai đến bao nhiêu % khách hàng hiện hữu đủ điều kiện?","docs":["4748DNTI"],"fact":"100%"},
+ {"q":"Trụ sở chính hỗ trợ FTP để chi nhánh đạt NIM.DN tối thiểu bao nhiêu?","docs":["214KHTI","1650CNTI"],"fact":"1,25%"},
+ {"q":"Chương trình cho vay ưu đãi tín dụng xanh đối với khách hàng cá nhân được triển khai theo văn bản nào?","docs":["1650CNTI"],"fact":"1650"},
+ {"q":"lai suat cho vay nguoi tre mua nha o xa hoi","docs":["4731KHTI"],"fact":"5,6%"},
+ {"q":"Lãi suất chương trình Có vốn trong tay hiện nay là bao nhiêu?","docs":["549CNTI","1866CNTI","66CNTI"],"fact":null,"answer_facts":["1866","549"],"expect_versions":["1866CNTI","549CNTI","66CNTI"],"expect_mode":["clarify","answer","insufficient"],"note":"amendment chain 66 -> 549 -> 955 -> 1866; must surface versions"},
+ {"q":"Lãi suất tiền gửi tiết kiệm kỳ hạn 12 tháng của ngân hàng là bao nhiêu?","docs":[],"fact":null,"expect_mode":["insufficient"],"note":"not in corpus"}
+]

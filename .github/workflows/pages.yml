@@ -1,0 +1,29 @@
+name: Deploy UI to GitHub Pages
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "scripts/build_static.py"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static UI
+        run: python3 scripts/build_static.py --api "${{ vars.API_BASE }}" --out dist   # repository variable API_BASE = public API origin
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
