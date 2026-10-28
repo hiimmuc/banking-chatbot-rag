@@ -47,5 +47,5 @@ class IngestService:
 if __name__ == "__main__":
     from .container import get_container
     service = get_container().ingest
-    for p in sorted(pathlib.Path(sys.argv[1]).glob("*")):
+    for p in sorted(pathlib.Path(sys.argv[1]).glob("[!.]*")):  # skips .DS_Store
         print(service.ingest_file(p), p.name[:50], flush=True)

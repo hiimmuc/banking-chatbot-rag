@@ -5,7 +5,10 @@ from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 from mineru_vl_utils import MinerUClient
 
 MODEL = "opendatalab/MinerU2.5-Pro-2604-1.2B"
-model = Qwen2VLForConditionalGeneration.from_pretrained(MODEL, dtype=torch.bfloat16 if os.environ.get("RAG_DEVICE", "cuda") == "cuda" else torch.float16, device_map=os.environ.get("RAG_DEVICE", "cuda"))
+DEV = os.environ.get("RAG_DEVICE", "cuda")
+# mps: device_map segfaults while loading weights on Apple Silicon, so load on CPU then move
+model = Qwen2VLForConditionalGeneration.from_pretrained(MODEL, dtype=torch.bfloat16 if DEV == "cuda" else torch.float16, device_map=DEV if DEV == "cuda" else None)
+if DEV != "cuda": model = model.to(DEV)
 proc = AutoProcessor.from_pretrained(MODEL, use_fast=True)
 client = MinerUClient(backend="transformers", model=model, processor=proc)
 

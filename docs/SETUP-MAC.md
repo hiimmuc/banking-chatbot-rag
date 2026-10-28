@@ -1,4 +1,4 @@
-# Hướng dẫn cài đặt trên MacBook M2 8 GB
+# Hướng dẫn cài đặt trên MacBook M2 8 GB (macOS 14 Sonoma)
 
 Hướng dẫn từng bước, từ máy trống đến khi khách dùng được chatbot. Mô hình triển khai: **máy Mac là server duy nhất** (API, giao diện, cơ sở dữ liệu, file tài liệu). Chat dùng OpenAI qua internet. Không cần GPU rời, không cần Docker.
 
@@ -16,7 +16,7 @@ Hướng dẫn từng bước, từ máy trống đến khi khách dùng đượ
 
 Cần có:
 
-- macOS 13 trở lên, ổ trống ≥ 15 GB, internet ổn định.
+- macOS 14 Sonoma trở lên (kiểm tra: **Apple menu → About This Mac**), ổ trống ≥ 15 GB, internet ổn định.
 - Khóa OpenAI (`sk-...`). Khóa Gemini nếu dùng OCR Gemini.
 - Tài khoản GitHub có quyền đọc repo `hiimmuc/banking-chatbot-rag` (nhánh `dev`).
 - Bộ PDF tài liệu của khách.
@@ -223,7 +223,7 @@ EOF
 launchctl load ~/Library/LaunchAgents/com.banking-rag.api.plist
 ```
 
-`caffeinate -is` giữ máy không ngủ khi dịch vụ đang chạy. Cũng nên vào **System Settings → Battery/Energy** bật "Prevent automatic sleeping when the display is off" và cắm sạc thường trực, nếu không máy ngủ thì web ngừng.
+`caffeinate -is` giữ máy không ngủ khi dịch vụ đang chạy. Cũng nên vào **System Settings → Battery → Options** (macOS 14) bật "Prevent automatic sleeping on power adapter when the display is off" và cắm sạc thường trực, nếu không máy ngủ thì web ngừng.
 
 Lệnh quản lý:
 
