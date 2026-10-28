@@ -7,7 +7,7 @@ Hướng dẫn từng bước, từ máy trống đến khi khách dùng đượ
 ## 0. Tổng quan và yêu cầu
 
 | Thành phần | Chạy ở đâu | Ghi chú |
-|---|---|---|
+| --- | --- | --- |
 | API + giao diện web | Mac (cổng 8080) | FastAPI, một tiến trình |
 | Embedding `bge-m3` + reranker `bge-reranker-v2-m3` | Mac (GPU Apple, `mps`) | tải ≈ 4,5 GB lần đầu, dùng ≈ 2,5 GB RAM |
 | Chat | OpenAI API | cần khóa API và internet |
@@ -15,6 +15,7 @@ Hướng dẫn từng bước, từ máy trống đến khi khách dùng đượ
 | Dữ liệu | thư mục `data/` trên Mac | SQLite, PDF gốc, cache OCR |
 
 Cần có:
+
 - macOS 13 trở lên, ổ trống ≥ 15 GB, internet ổn định.
 - Khóa OpenAI (`sk-...`). Khóa Gemini nếu dùng OCR Gemini.
 - Tài khoản GitHub có quyền đọc repo `hiimmuc/banking-chatbot-rag` (nhánh `dev`).
@@ -125,6 +126,7 @@ ALLOW_CUSTOM_ENDPOINTS=0
 ```
 
 Ghi chú:
+
 - Logo: đặt file `png/webp/jpg` vào thư mục `private/brand/` rồi ghi đường dẫn, ví dụ `BRAND_LOGO_HEADER=private/brand/logo.png`. Không dùng SVG.
 - Giá trị trống, `***REMOVED***` hoặc bắt đầu bằng `your-` được coi là chưa đặt.
 - **Không gửi `.env` qua chat hay email.** File này đã nằm trong `.gitignore`.
@@ -162,7 +164,7 @@ Lệnh thứ hai OCR từng trang (qua engine trong `OCR_BACKEND`), cắt đoạ
 ## 6. Chọn OCR cho Mac 8 GB
 
 | | Gemini (`OCR_BACKEND=gemini`) | MinerU local (`OCR_BACKEND=mineru`) |
-|---|---|---|
+| --- | --- | --- |
 | RAM | gần 0 | ≈ 2,5–3 GB, **không chạy cùng API** |
 | Tốc độ | vài giây mỗi trang | chậm trên Mac **[chưa kiểm chứng]**; trên GPU NVIDIA ≈ 30 giây |
 | Riêng tư | **ảnh từng trang gửi lên Google** | không rời máy |
@@ -299,7 +301,7 @@ launchctl load ~/Library/LaunchAgents/com.banking-rag.api.plist
 ## 11. Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
-|---|---|
+| --- | --- |
 | `MPS backend out of memory` hoặc máy rất chậm, treo | Đóng ứng dụng khác. Đặt `RAG_DEVICE=cpu` rồi khởi động lại. Không chạy OCR MinerU cùng API. |
 | Câu hỏi đầu tiên rất chậm | Bình thường: nạp model lần đầu (≈ 20–60 giây). Các câu sau nhanh hơn. |
 | `Sai hoặc thiếu API key` | Kiểm tra `OPENAI_API_KEY` trong `.env`, không có khoảng trắng hay dấu ngoặc thừa. Khởi động lại dịch vụ. |
