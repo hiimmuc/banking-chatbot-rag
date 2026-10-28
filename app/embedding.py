@@ -2,7 +2,18 @@ import threading
 import numpy as np
 from .config import DEVICE, EMBED_MODEL, RERANK_MODEL
 
-_FP16 = {"torch_dtype": "float16"} if DEVICE == "cuda" else {}
+_FP16 = {"torch_dtype": "float16"} if DEVICE in ("cuda", "mps") else {}
+
+
+def _shrinking_batches(run):
+    """GPU is shared with other services: on CUDA OOM free the cache and retry with a smaller batch before giving up."""
+    import torch
+    for size in (8, 4, 2, 1):
+        try:
+            return run(size)
+        except torch.OutOfMemoryError:
+            torch.cuda.empty_cache()
+    return run(1)
 
 
 class Embedder:
@@ -20,7 +31,8 @@ class Embedder:
         return self._model
 
     def encode(self, texts: list[str]) -> np.ndarray:
-        return self._load().encode(texts, batch_size=8, normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+        model = self._load()
+        return _shrinking_batches(lambda n: model.encode(texts, batch_size=n, normalize_embeddings=True, convert_to_numpy=True)).astype("float32")
 
 
 class Reranker:
@@ -37,4 +49,5 @@ class Reranker:
         return self._model
 
     def score(self, query: str, texts: list[str]) -> list[float]:
-        return [float(s) for s in self._load().predict([(query, t) for t in texts], batch_size=8)]
+        model, pairs = self._load(), [(query, t) for t in texts]
+        return [float(s) for s in _shrinking_batches(lambda n: model.predict(pairs, batch_size=n))]

@@ -105,6 +105,8 @@ Phụ thuộc đi một chiều: `api → services → (retrieval, store, embedd
 
 ## Cài đặt
 
+Máy Mac (M2 8 GB, chat qua OpenAI): xem [docs/SETUP-MAC.md](docs/SETUP-MAC.md).
+
 ```bash
 # môi trường ứng dụng
 uv venv --python 3.10 .venv
@@ -131,8 +133,8 @@ Sao chép `.env.example` thành `.env` (đã nằm trong `.gitignore`, cùng `pr
 |---|---|---|
 | `ORG_NAME`, `AUTHOR_INFO` | – | Tên tổ chức (tiêu đề, prompt) và dòng tác giả ở footer |
 | `BRAND_LOGO_HEADER`, `BRAND_LOGO_FOOTER_LIGHT`, `BRAND_LOGO_FOOTER_DARK` | – | Đường dẫn logo png/webp/jpg (không nhận SVG) |
-| `CHAT_PROVIDER` | `qwen` | Provider mặc định: `qwen`, `gemini`, `openai` |
-| `QWEN_BASE_URL` | `http://127.0.0.1:8000/v1` | Endpoint vLLM |
+| `CHAT_PROVIDER` | `openai` | Provider mặc định: `qwen`, `gemini`, `openai` |
+| `QWEN_BASE_URL` | trống | Endpoint vLLM, ví dụ `http://127.0.0.1:8000/v1`. Trống thì ẩn lựa chọn Qwen |
 | `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL` | –, `gpt-4.1-mini` | OpenAI; model là danh sách phân tách bằng dấu phẩy, mục đầu là mặc định. Eval 14 câu: `gpt-4.1-mini` 13/14, `gpt-5.4-mini` 13/14, `gpt-5.4-nano` 12/14 |
 | `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL` | –, `gemini-3.5-flash` | Gemini chat (endpoint OpenAI-compatible) |
 | `OCR_BACKEND`, `GEMINI_OCR_MODEL` | `mineru`, `gemini-3.5-flash` | OCR; `gemini` gửi ảnh trang lên Google |
@@ -217,13 +219,12 @@ Chưa có: tài khoản theo người dùng, nhật ký kiểm toán, xóa tài 
 
 ## Triển khai
 
-Mô hình: **máy này là server duy nhất** (API, SQLite, file tải lên, OCR, embedding, vLLM, và mọi lời gọi OpenAI/Gemini). Giao diện có thể nằm ở host tĩnh bên ngoài; người dùng tải tài liệu lên và xem lại qua API, dữ liệu luôn nằm ở `data/` trên máy này.
+Mô hình: **máy này là server duy nhất** (API, giao diện, SQLite, file tải lên, OCR, embedding, vLLM, và mọi lời gọi OpenAI/Gemini). Giao diện và API cùng một origin, nên không cần host tĩnh riêng.
 
 ```mermaid
 flowchart LR
-  U[Người dùng] --> UI[Pages: UI tĩnh]
-  UI -->|HTTPS + Bearer| F[Tailscale Funnel / Cloudflare Tunnel]
-  F --> API[uvicorn :8080 trên máy host]
+  U[Người dùng] -->|HTTPS| F[Tailscale Funnel]
+  F --> API[uvicorn :8080: UI + API]
   API --> V[vLLM :8000]
   API --> X[OpenAI / Gemini]
   API --> D[(data/: SQLite, PDF, OCR)]
@@ -235,29 +236,26 @@ flowchart LR
 deploy/install.sh        # systemd user service + vLLM tự khởi động lại (docker --restart unless-stopped)
 ```
 
-**2. Công khai API** (chọn một; URL phải ổn định để UI trỏ vào):
+**2. Công khai** (một lần; cần `tailscale up`, bật HTTPS và Funnel cho node trong admin console):
 
 ```bash
-tailscale up                      # một lần; cần bật HTTPS và Funnel cho node trong admin console
-deploy/expose.sh tailscale        # https://<máy>.<tailnet>.ts.net
+tailscale serve status            # xem cổng Funnel đang dùng trước khi thêm
+deploy/expose.sh tailscale        # https://<máy>.<tailnet>.ts.net (cổng 443)
 ```
 
-`deploy/expose.sh cloudflared` dùng quick tunnel: URL đổi mỗi lần chạy, chỉ hợp để thử. Muốn URL cố định với Cloudflare, tạo named tunnel (`cloudflared tunnel create`, cần tên miền). Đặt `TRUST_PROXY=1` trong `.env` khi đi qua Funnel/tunnel.
+`deploy/expose.sh tailscale` chiếm cổng 443 của node. Nếu 443 đang dành cho service khác, dùng cổng 10000: `tailscale funnel --bg --https=10000 8080`. Đặt `TRUST_PROXY=1` trong `.env` khi đi qua Funnel.
 
-**3. Đăng giao diện** (thay `API` bằng origin ở bước 2):
+`deploy/expose.sh cloudflared` dùng quick tunnel: URL đổi mỗi lần chạy, chỉ hợp để thử, và có thể không chạy được nếu máy không gọi được dịch vụ tạo tunnel.
+
+**Địa chỉ ngắn, không cần tên miền (tùy chọn):** `deploy/worker/` là Cloudflare Worker chuyển tiếp thẳng tới địa chỉ Funnel (đổi `ORIGIN` trong `wrangler.toml`). Gói miễn phí đủ dùng, địa chỉ dạng `https://<tên>.<tài-khoản>.workers.dev`, và trình duyệt không thấy IP riêng `100.x` nên không hỏi quyền mạng cục bộ.
 
 ```bash
-python scripts/build_static.py --api https://<máy>.<tailnet>.ts.net --out dist
-npx wrangler pages deploy dist --project-name banking-rag     # Cloudflare Pages
+cd deploy/worker && npx wrangler@3 deploy
 ```
 
-GitHub Pages: đặt repository variable `API_BASE`, workflow `.github/workflows/pages.yml` tự build và đăng khi push `web/**`.
+Worker chỉ chuyển tiếp, máy host và Funnel vẫn phải chạy. IP khách được gửi trong `X-Forwarded-For`; chưa kiểm chứng giới hạn tốc độ theo IP khi đi qua Worker.
 
-**4. Cho phép UI gọi API:** thêm origin của UI vào `.env`, rồi `systemctl --user restart rag-api`:
-
-```
-ALLOWED_ORIGINS=https://banking-rag.pages.dev
-```
+**Không nên tách giao diện sang Pages khi API ở địa chỉ `*.ts.net`.** Máy có Tailscale phân giải tên đó ra IP riêng `100.x`, nên Chrome hỏi quyền truy cập mạng cục bộ và chặn cuộc gọi nếu bị từ chối. Nếu vẫn cần host tĩnh, API phải ở tên miền phân giải ra IP công cộng; khi đó dùng `python scripts/build_static.py --api https://<api> --out dist`, đăng thư mục `dist` và đặt `ALLOWED_ORIGINS=<origin của UI>`.
 
 **Tự triển khai API khi push (tùy chọn):** cài GitHub self-hosted runner trên máy này, đặt variable `DEPLOY_DIR`; `.github/workflows/backend.yml` chạy `git pull`, `pytest`, restart dịch vụ. Chỉ dùng với repo private, vì runner chạy mã của workflow trên máy bạn.
 

@@ -91,7 +91,7 @@ class Provider:
 
     @property
     def available(self) -> bool:
-        return bool(self.api_key) or not self.needs_key
+        return bool(self.base_url) and (bool(self.api_key) or not self.needs_key)
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ class RetrievalParams:
 
 def _providers() -> dict[str, Provider]:
     items = (
-        Provider("qwen", "Qwen3.5-2B (local vLLM)", env("QWEN_BASE_URL", "http://127.0.0.1:8000/v1"), env("QWEN_API_KEY", "EMPTY"),
+        Provider("qwen", "Qwen3.5-2B (local vLLM)", env("QWEN_BASE_URL"), env("QWEN_API_KEY", "EMPTY"),
                  ("Qwen/Qwen3.5-2B",), extra_body={"chat_template_kwargs": {"enable_thinking": False}}, needs_key=False),
         Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/", env("GEMINI_API_KEY"),
                  (env("GEMINI_CHAT_MODEL", "gemini-3.5-flash"),)),
@@ -115,7 +115,7 @@ def _providers() -> dict[str, Provider]:
 
 
 PROVIDERS = {k: p for k, p in _providers().items() if p.available}
-DEFAULT_PROVIDER = env("CHAT_PROVIDER", "qwen") if env("CHAT_PROVIDER", "qwen") in PROVIDERS else next(iter(PROVIDERS))
+DEFAULT_PROVIDER = env("CHAT_PROVIDER", "openai") if env("CHAT_PROVIDER", "openai") in PROVIDERS else next(iter(PROVIDERS))
 RETRIEVAL = RetrievalParams()
 
 # Chat endpoints added from the settings dialog. Off by default: the server calls whatever URL it is given.
