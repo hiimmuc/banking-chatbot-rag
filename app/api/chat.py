@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     max_output_tokens: int = 1200
     style: str = config.DEFAULT_STYLE
     temperature: float | None = Field(default=0.2, ge=0, le=1)
+    document_ids: list[str] | None = Field(default=None, max_length=500)  # None = search every document
 
 
 def _params(req: ChatRequest, c: Container) -> ChatParams:
@@ -27,7 +28,8 @@ def _params(req: ChatRequest, c: Container) -> ChatParams:
     model = req.model or provider.models[0]
     if model not in provider.models:
         raise HTTPException(400, "Model không nằm trong danh sách cho phép")
-    return ChatParams(key, model, max(100, min(req.max_output_tokens, config.MAX_OUTPUT_TOKENS_CAP)), req.temperature, req.style)
+    return ChatParams(key, model, max(100, min(req.max_output_tokens, config.MAX_OUTPUT_TOKENS_CAP)), req.temperature, req.style,
+                      None if req.document_ids is None else frozenset(req.document_ids))
 
 
 @router.post("/chat")

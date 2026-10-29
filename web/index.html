@@ -11,7 +11,7 @@
 <body>
 <div class="app" id="app">
   <header>
-    <button class="btn only-narrow" id="docsBtn" aria-label="Mở danh sách tài liệu">Tài liệu</button>
+    <button class="btn" id="docsBtn" aria-controls="docsPane" aria-expanded="true">Thư viện</button>
     <span id="logoSlot"></span>
     <div class="grow">
       <h1 id="appTitle">Internal Chatbot</h1>
@@ -22,11 +22,14 @@
   </header>
 
   <aside id="docsPane" aria-label="Tài liệu">
-    <div class="head"><h2>Tài liệu</h2><button class="btn only-narrow" id="docsClose" aria-label="Đóng danh sách tài liệu">Đóng</button></div>
+    <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Đổi độ rộng danh sách tài liệu" aria-valuemin="240" aria-valuemax="560" tabindex="0"></div>
+    <div class="head"><h2>Thư viện tài liệu</h2><button class="btn" id="docsClose" aria-label="Ẩn thư viện tài liệu" title="Ẩn thư viện">«</button></div>
+    <div class="docbar"><span id="docCount" role="status"></span><span class="grow"></span>
+      <button type="button" class="btn" id="selAll">Chọn hết</button><button type="button" class="btn" id="selNone">Bỏ chọn</button></div>
     <ul class="docs" id="docs"><li class="doc"><span class="status">Đang tải danh sách<span class="dots"></span></span></li></ul>
     <div class="upload">
       <input type="file" id="file" class="sr" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg">
-      <button class="btn block" id="uploadBtn">Tải tài liệu lên</button>
+      <button class="btn primary block" id="uploadBtn">Tải tài liệu lên</button>
       <p class="hint">Định dạng cho phép: PDF, DOCX, TXT, PNG, JPG. Tối đa 20MB</p>
       <p class="err" id="uploadErr" role="alert" hidden></p>
     </div>
@@ -52,13 +55,14 @@
     <div class="author" id="author"></div>
   </footer>
 
-  <section class="source" id="source" hidden aria-label="Nguồn trích dẫn">
-    <div class="head"><div class="grow" id="srcTitle"></div><button class="btn" id="srcClose">Đóng</button></div>
-    <div class="meta" id="srcMeta"></div>
-    <div class="excerpt" id="srcExcerpt"></div>
-    <iframe id="srcFrame" title="Văn bản gốc"></iframe>
-  </section>
 </div>
+
+<dialog id="source" class="srcdlg" aria-label="Nguồn trích dẫn">
+  <div class="head"><div class="grow" id="srcTitle"></div><button class="btn" id="srcClose">Đóng</button></div>
+  <div class="meta"><span id="srcMeta"></span>
+    <span class="pager"><button type="button" class="btn" id="srcPrev" aria-label="Trang trước">‹</button><span id="srcPage"></span><button type="button" class="btn" id="srcNext" aria-label="Trang sau">›</button></span></div>
+  <div class="srcbody"><div class="pgimg"><div class="pgwrap" id="srcWrap" hidden><img id="srcImg" alt="Trang tài liệu gốc"><div id="srcBoxes"></div></div></div><div class="excerpt" id="srcText"></div></div>
+</dialog>
 
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
@@ -68,6 +72,8 @@
     <label for="sTokens">Giới hạn độ dài trả lời (token)</label><input id="sTokens" type="number" min="100" step="50">
     <label for="sStyle">Phong cách</label>
     <select id="sStyle"><option value="friendly">Tự nhiên &amp; thân thiện</option><option value="concise">Ngắn gọn</option><option value="detailed">Chi tiết</option></select>
+    <label for="sFont">Cỡ chữ</label>
+    <select id="sFont"><option value="0.9">Nhỏ</option><option value="1">Vừa</option><option value="1.125">Lớn (mặc định)</option><option value="1.25">Rất lớn</option><option value="1.4">Cực lớn</option></select>
     <label for="sTemp">Temperature (0 đến 1)</label><input id="sTemp" type="number" min="0" max="1" step="0.1">
     <fieldset id="epBox" hidden>
       <legend>Endpoint chat riêng</legend>

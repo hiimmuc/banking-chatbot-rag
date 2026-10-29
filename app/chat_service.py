@@ -22,6 +22,7 @@ class ChatParams:
     max_tokens: int
     temperature: float | None
     style: str
+    doc_ids: frozenset[str] | None = None  # documents the user selected; None = all
 
 
 class ChatService:
@@ -54,7 +55,7 @@ class ChatService:
             return
 
         query = self._standalone_query(provider, params, question, history)
-        sources, labels, versions = self._versions.plan(query, self._retriever.retrieve(query))
+        sources, labels, versions = self._versions.plan(query, self._retriever.retrieve(query, params.doc_ids), params.doc_ids)
         messages = build_messages(question, history, sources, params.style, labels, versions)
         known = "\n".join(f"{chunk_label(c)} {c['text']}" for c in sources)  # headers carry the document number and issue date
         mode, text, usage, issues = self._generate(provider, params, messages, known, len(sources))

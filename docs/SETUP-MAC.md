@@ -1,60 +1,44 @@
-# Hướng dẫn cài đặt trên MacBook M2 8 GB (macOS 14 Sonoma)
+# Cài đặt trên MacBook M2 8 GB (macOS 14 Sonoma)
 
-Hướng dẫn từng bước, từ máy trống đến khi khách dùng được chatbot. Mô hình triển khai: **máy Mac là server duy nhất** (API, giao diện, cơ sở dữ liệu, file tài liệu). Chat dùng OpenAI qua internet. Không cần GPU rời, không cần Docker.
+Từ máy trống đến khi khách dùng được chatbot. **Mac là server duy nhất**: API, giao diện, cơ sở dữ liệu, file tài liệu. Chat dùng OpenAI qua internet. Không cần GPU rời, không cần Docker.
 
-> **Chưa kiểm thử trên Mac.** Dự án được phát triển và chạy thử trên Linux (GPU NVIDIA). Các bước dưới đây đã điều chỉnh cho Apple Silicon (`RAG_DEVICE=mps`) nhưng chưa chạy thật trên M2. Nên cài thử trước một lần tại chỗ của bạn, rồi mới mang đến khách. Các chỗ chưa chắc được đánh dấu **[chưa kiểm chứng]**.
+> **Đã chạy thử trên M2 8 GB:** cài môi trường, embedding bằng `mps`, nạp MinerU (rất chậm, xem mục 6). **Chưa kiểm chứng:** launchd (mục 8), Tailscale trên macOS (mục 9). Chỗ chưa chắc có đánh dấu **[chưa kiểm chứng]**.
 
-## 0. Tổng quan và yêu cầu
+## Tóm tắt (đường nhanh nhất)
+
+1. Cài công cụ và môi trường Python (mục 1 đến 3).
+2. Điền `.env` với **`RAG_DEVICE=mps`** (mục 4). Quên dòng này là lỗi hay gặp nhất: `Torch not compiled with CUDA enabled`.
+3. **OCR trên máy có GPU NVIDIA hoặc bằng Gemini, không OCR bằng MinerU trên Mac** (mục 5 và 6). Chép `data/ocr/` hoặc `data/rag.db` sang Mac.
+4. Chạy API (mục 7), tự khởi động bằng launchd (mục 8), công khai nếu cần (mục 9).
+
+## 0. Yêu cầu
 
 | Thành phần | Chạy ở đâu | Ghi chú |
 | --- | --- | --- |
-| API + giao diện web | Mac (cổng 8080) | FastAPI, một tiến trình |
-| Embedding `bge-m3` + reranker `bge-reranker-v2-m3` | Mac (GPU Apple, `mps`) | tải ≈ 4,5 GB lần đầu, dùng ≈ 2,5 GB RAM |
-| Chat | OpenAI API | cần khóa API và internet |
-| OCR cho PDF scan | Gemini API **hoặc** MinerU local | xem mục 6 |
-| Dữ liệu | thư mục `data/` trên Mac | SQLite, PDF gốc, cache OCR |
+| API + giao diện web | Mac, cổng 8080 | FastAPI, một tiến trình |
+| Embedding `bge-m3`, reranker `bge-reranker-v2-m3` | Mac, GPU Apple (`mps`) | tải ≈ 4,5 GB lần đầu, dùng ≈ 2,5 GB RAM |
+| Chat | OpenAI API | cần khóa và internet |
+| OCR cho PDF scan | Gemini, MinerU, hoặc máy khác | xem mục 6 |
+| Dữ liệu | `data/` trên Mac | SQLite, PDF gốc, cache OCR |
 
-Cần có:
+Cần có: macOS 14 trở lên (kiểm tra ở **Apple menu → About This Mac**), ổ trống ≥ 15 GB, khóa OpenAI (`sk-...`; thêm khóa Gemini nếu dùng OCR Gemini), quyền đọc repo `hiimmuc/banking-chatbot-rag` (nhánh `dev`), bộ PDF của khách.
 
-- macOS 14 Sonoma trở lên (kiểm tra: **Apple menu → About This Mac**), ổ trống ≥ 15 GB, internet ổn định.
-- Khóa OpenAI (`sk-...`). Khóa Gemini nếu dùng OCR Gemini.
-- Tài khoản GitHub có quyền đọc repo `hiimmuc/banking-chatbot-rag` (nhánh `dev`).
-- Bộ PDF tài liệu của khách.
+**RAM 8 GB:** macOS và trình duyệt ≈ 4 GB, embedding + reranker ≈ 2,5 GB, gần hết chỗ. Đóng ứng dụng nặng; không chạy OCR MinerU (≈ 2,5-3 GB) cùng lúc với API; không chạy `app.ingest` khi API đang chạy.
 
-**Ngân sách RAM 8 GB:** macOS + trình duyệt đã dùng ≈ 4 GB, embedding + reranker ≈ 2,5 GB. Chỉ còn rất ít chỗ. Quy tắc: **đóng ứng dụng nặng, không chạy OCR MinerU cùng lúc với API**.
-
-## 1. Cài công cụ nền
+## 1. Công cụ nền
 
 Mở **Terminal** (Cmd + Space, gõ `Terminal`).
 
-**1.1. Công cụ dòng lệnh của Apple**
-
 ```bash
 xcode-select --install
-```
-
-**1.2. Homebrew** (trình quản lý gói)
-
-```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-Cuối quá trình Homebrew in hai dòng bắt đầu bằng `echo` và `eval` để thêm vào PATH. Chạy đúng hai dòng đó, rồi kiểm tra:
-
-```bash
-brew --version
-```
-
-**1.3. Git, uv (quản lý Python)**
+Cuối bước Homebrew in hai dòng `echo` và `eval` để thêm vào PATH: chạy đúng hai dòng đó. Rồi:
 
 ```bash
 brew install git uv
-```
-
-**1.4. Kiểm tra**
-
-```bash
-git --version && uv --version
+git --version && uv --version && brew --version
 ```
 
 ## 2. Lấy mã nguồn
@@ -65,128 +49,114 @@ git clone -b dev git@github.com:hiimmuc/banking-chatbot-rag.git banking-rag
 cd banking-rag
 ```
 
-Nếu báo lỗi quyền (`Permission denied (publickey)`), chưa có khóa SSH GitHub trên máy này. Dùng HTTPS thay thế (GitHub sẽ hỏi tài khoản và token):
+Báo `Permission denied (publickey)` nghĩa là chưa có khóa SSH GitHub. Dùng HTTPS (GitHub hỏi tài khoản và token): `git clone -b dev https://github.com/hiimmuc/banking-chatbot-rag.git banking-rag`.
 
-```bash
-git clone -b dev https://github.com/hiimmuc/banking-chatbot-rag.git banking-rag
-```
+Cập nhật về sau: `git pull`, rồi cài lại phụ thuộc nếu `requirements.txt` đổi.
 
-## 3. Cài môi trường Python
+## 3. Môi trường Python
 
 ```bash
 uv venv --python 3.10 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
-```
-
-Bước này tải PyTorch và các thư viện, mất vài phút. **[chưa kiểm chứng]** Nếu `torch==2.11.0` không có bản cho macOS, đổi dòng đó trong `requirements.txt` thành `torch` rồi chạy lại.
-
-Kiểm tra GPU Apple dùng được:
-
-```bash
 .venv/bin/python -c "import torch; print(torch.backends.mps.is_available())"
 ```
 
-Phải in `True`. Nếu in `False`, dùng `RAG_DEVICE=cpu` ở bước 4 (chạy được nhưng chậm hơn nhiều).
+Bước cài mất vài phút. Lệnh cuối phải in `True`; nếu `False`, dùng `RAG_DEVICE=cpu` (chạy được nhưng chậm hơn nhiều). **[chưa kiểm chứng]** Nếu `torch==2.11.0` không có bản cho macOS, đổi dòng đó trong `requirements.txt` thành `torch` rồi cài lại.
 
 ## 4. Cấu hình `.env`
 
 ```bash
-cp .env.example .env
-chmod 600 .env
-open -e .env
+cp .env.example .env && chmod 600 .env && open -e .env
 ```
 
-`.env.example` che các giá trị nhạy cảm bằng `***REMOVED***`; bạn điền giá trị thật vào `.env`. Các dòng cần sửa:
+`.env.example` che giá trị nhạy cảm bằng `***REMOVED***`; điền giá trị thật vào `.env`. **Sửa dòng có sẵn, không thêm dòng trùng** (`.env.example` mặc định `RAG_DEVICE=cuda`). Kiểm tra bằng `grep RAG_DEVICE .env`.
 
 ```ini
-# --- chat ---
 CHAT_PROVIDER=openai
-OPENAI_API_KEY=sk-...                 # khóa của khách
-OPENAI_CHAT_MODEL=gpt-4.1-mini,gpt-5.4-mini   # mục đầu là mặc định
-QWEN_BASE_URL=                        # để trống: ẩn lựa chọn Qwen local
-GEMINI_API_KEY=                       # chỉ điền nếu dùng OCR Gemini
+OPENAI_API_KEY=sk-...                          # khóa của khách
+OPENAI_CHAT_MODEL=gpt-4.1-mini,gpt-5.4-mini    # mục đầu là mặc định
+QWEN_BASE_URL=                                 # để trống: ẩn lựa chọn Qwen local
+GEMINI_API_KEY=                                # chỉ điền nếu dùng OCR Gemini
 
-# --- OCR ---
-OCR_BACKEND=gemini                    # khuyến nghị cho Mac 8 GB (xem mục 6)
+OCR_BACKEND=gemini                             # gemini hoặc mineru (mục 6)
+RAG_DEVICE=mps                                 # cpu nếu mps không dùng được
 
-# --- thiết bị tính toán ---
-RAG_DEVICE=mps                        # cpu nếu mps không dùng được
-
-# --- thương hiệu (tùy chọn, để trống thì hiện chỗ đặt logo) ---
-ORG_NAME=Tên đơn vị
+ORG_NAME=Tên đơn vị                            # thương hiệu: tùy chọn
 AUTHOR_INFO=Họ tên - Đơn vị
-BRAND_LOGO_HEADER=
+BRAND_LOGO_HEADER=                             # png/webp/jpg, không dùng SVG
 BRAND_LOGO_FOOTER_LIGHT=
 BRAND_LOGO_FOOTER_DARK=
 
-# --- truy cập ---
 APP_USER=admin
-APP_PASSWORD=                         # BẮT BUỘC đặt nếu mở ra internet (mục 9)
+APP_PASSWORD=                                  # BẮT BUỘC đặt nếu mở ra internet (mục 9)
 ALLOW_CUSTOM_ENDPOINTS=0
 ```
 
-Ghi chú:
-
-- Logo: đặt file `png/webp/jpg` vào thư mục `private/brand/` rồi ghi đường dẫn, ví dụ `BRAND_LOGO_HEADER=private/brand/logo.png`. Không dùng SVG.
+- Logo: đặt file vào `private/brand/`, ghi đường dẫn như `BRAND_LOGO_HEADER=private/brand/logo.png`. Báo `ignored: not a png/webp/jpg` nghĩa là file không phải ảnh thật; kiểm tra bằng `file private/brand/*`.
 - Giá trị trống, `***REMOVED***` hoặc bắt đầu bằng `your-` được coi là chưa đặt.
-- **Không gửi `.env` qua chat hay email.** File này đã nằm trong `.gitignore`.
+- **Không gửi `.env` qua chat hay email.** File đã nằm trong `.gitignore`.
 
 ## 5. Nạp tài liệu
 
-**5.1. Đưa PDF vào**
+Có bốn cách đưa tài liệu vào. Chọn theo tình huống:
+
+| Cách | Khi nào | Lệnh |
+| --- | --- | --- |
+| Giao diện web | Dùng thường ngày | nút **Tải tài liệu lên** (≤ 20 MB, ≤ 200 tài liệu) |
+| Dòng lệnh | Giao diện lỗi, nạp hàng loạt | xem dưới |
+| `curl` | Script, API đang chạy | `curl -u admin:MATKHAU -F "file=@x.pdf" http://localhost:8080/api/documents` |
+| Chép từ máy khác | OCR trên máy GPU rồi mang sang | xem mục 6 |
+
+**Dòng lệnh** (dừng API trước để đỡ tốn RAM):
 
 ```bash
-mkdir -p data/raw
-cp /đường/dẫn/tới/*.pdf data/raw/
-```
-
-Tên file nên bắt đầu bằng mã văn bản (ví dụ `66CNTI_...pdf`), vì mã này dùng làm ID tài liệu.
-
-**5.2. Tải trước model embedding** (tránh chờ ở lần chạy đầu, ≈ 4,5 GB):
-
-```bash
+mkdir -p data/raw && cp /đường/dẫn/*.pdf data/raw/
 .venv/bin/python -c "
 from sentence_transformers import SentenceTransformer, CrossEncoder
-SentenceTransformer('BAAI/bge-m3'); CrossEncoder('BAAI/bge-reranker-v2-m3'); print('ok')"
-```
-
-**5.3. Chuyển PDF thành ảnh trang, OCR, lập chỉ mục**
-
-```bash
-.venv/bin/python scripts/render_pages.py
+SentenceTransformer('BAAI/bge-m3'); CrossEncoder('BAAI/bge-reranker-v2-m3'); print('ok')"   # tải model trước, ≈ 4,5 GB
 .venv/bin/python -m app.ingest data/raw
 ```
 
-Lệnh thứ hai OCR từng trang (qua engine trong `OCR_BACKEND`), cắt đoạn, tạo vector và ghi vào `data/rag.db`. Kết quả OCR được lưu ở `data/ocr/` nên chạy lại sẽ nhanh. Với Gemini mỗi trang mất vài giây; với PDF vài chục trang, chờ vài phút.
+`app.ingest` OCR (theo `OCR_BACKEND`), cắt đoạn, tạo vector, ghi `data/rag.db`; bỏ qua file ẩn như `.DS_Store`. Chạy lại an toàn: trang đã có cache `data/ocr/` không OCR lại, đoạn cũ bị thay chứ không nhân đôi.
 
-> Tài liệu cũng có thể tải lên sau từ giao diện web (nút **Tải tài liệu lên**), không cần chạy dòng lệnh. Tối đa 20 MB mỗi file, tối đa 200 tài liệu.
+- Tên file nên bắt đầu bằng mã văn bản (`66CNTI_...pdf`); mã này làm ID tài liệu. Tên khác nhận ID băm.
+- `scripts/render_pages.py` không cần thiết (ingest tự render ảnh trang); file có tên không bắt đầu bằng mã bị bỏ qua.
+- Nếu khởi động lại API giữa lúc đang xử lý, tài liệu dở dang tự được làm tiếp khi API lên lại.
 
-## 6. Chọn OCR cho Mac 8 GB
+Trong giao diện, mỗi tài liệu đang xử lý có thanh tiến trình theo từng bước (OCR theo trang, rồi lập chỉ mục).
 
-| | Gemini (`OCR_BACKEND=gemini`) | MinerU local (`OCR_BACKEND=mineru`) |
-| --- | --- | --- |
-| RAM | gần 0 | ≈ 2,5–3 GB, **không chạy cùng API** |
-| Tốc độ | vài giây mỗi trang | chậm trên Mac **[chưa kiểm chứng]**; trên GPU NVIDIA ≈ 30 giây |
-| Riêng tư | **ảnh từng trang gửi lên Google** | không rời máy |
-| Cần | `GEMINI_API_KEY` | môi trường riêng `.venv-mineru` (bên dưới) |
+## 6. OCR: chọn cách nào
 
-**Hỏi khách trước khi chọn Gemini**: tài liệu ngân hàng nội bộ sẽ được gửi sang Google để OCR. Nếu không chấp nhận, dùng MinerU.
+| | Gemini | MinerU trên Mac | MinerU trên máy GPU |
+| --- | --- | --- | --- |
+| Đặt | `OCR_BACKEND=gemini` | `OCR_BACKEND=mineru` | chạy ở máy khác |
+| Tốc độ | vài giây mỗi trang | **≈ 7 phút mỗi trang** (đo trên M2 8 GB; 84 trang ≈ 10 giờ) | ≈ 30 giây mỗi trang (RTX 4060) |
+| RAM Mac | gần 0 | ≈ 2,5-3 GB, **không chạy cùng API** | 0 |
+| Riêng tư | **ảnh từng trang gửi lên Google** | không rời máy | không rời máy |
+| Toạ độ khung chữ | không | có | có |
 
-Cài MinerU (chỉ khi cần):
+**Khuyến nghị:** OCR ở máy có GPU NVIDIA rồi chép sang Mac. Nếu tài liệu không được gửi ra ngoài thì đây là cách duy nhất vừa nhanh vừa riêng tư. Nếu khách chấp nhận gửi ảnh lên Google, dùng Gemini (**hỏi khách trước**).
+
+**Chép kết quả từ máy GPU sang Mac:**
+
+```bash
+# trên máy GPU: nén cache OCR và (tùy chọn) cả cơ sở dữ liệu đã ingest
+cd data && zip -r ocr.zip ocr && zip rag-db.zip rag.db      # nên dừng API trước khi nén rag.db
+# trên Mac, trong thư mục banking-rag, sau khi đã đặt PDF vào data/raw/
+unzip -o ocr.zip -d data/
+.venv/bin/python -m app.ingest data/raw        # bỏ qua OCR, chỉ tạo vector (vài phút)
+```
+
+Hoặc chép luôn `rag.db` để khỏi ingest: dừng API, xóa `data/rag.db*` cũ, `unzip -o rag-db.zip -d data/`, đặt PDF vào `data/raw/`. Cần cùng `EMBED_MODEL` ở hai máy. Đường dẫn file trong DB là tương đối nên chạy được khi API chạy từ thư mục `banking-rag`.
+
+**Cài MinerU trên Mac (chỉ khi thật sự cần):**
 
 ```bash
 uv venv --python 3.10 .venv-mineru
 uv pip install --python .venv-mineru/bin/python "mineru[core]" transformers accelerate
 ```
 
-Đặt `OCR_BACKEND=mineru` và `RAG_DEVICE=mps` trong `.env`, **tắt API** (nếu đang chạy), rồi OCR trước:
-
-```bash
-RAG_DEVICE=mps .venv-mineru/bin/python scripts/ocr_mineru.py data/ocr data/pages/*.png
-.venv/bin/python -m app.ingest data/raw
-```
-
-Sau đó mới bật API. PDF có sẵn chữ (không phải ảnh scan) vẫn qua OCR trong thiết kế hiện tại.
+Không chạy lệnh `--reinstall torch ... cu128` của README (dành cho NVIDIA). Model MinerU (≈ 2,3 GB) tự tải lần đầu. Cần `RAG_DEVICE=mps` và bản mã có sửa nạp model (nạp CPU rồi chuyển sang `mps`), nếu không sẽ báo `segmentation fault` ở `Loading weights`. Tài liệu upload qua giao diện cũng đi qua MinerU này; mỗi tài liệu có thể mất hàng giờ.
 
 ## 7. Chạy thử
 
@@ -194,11 +164,13 @@ Sau đó mới bật API. PDF có sẵn chữ (không phải ảnh scan) vẫn q
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
 ```
 
-Mở `http://localhost:8080` trong trình duyệt. Hỏi thử "Hello" (phải ra câu chào cố định, tức thì) rồi một câu nghiệp vụ có trong tài liệu (phải có trích dẫn `[S1]` bấm được để mở đúng trang PDF). Câu hỏi đầu tiên có thể chậm vì nạp model vào bộ nhớ. Dừng bằng Ctrl+C.
+Mở `http://localhost:8080`. Hỏi "Hello" (phải ra câu chào cố định, tức thì), rồi một câu nghiệp vụ có trong tài liệu: câu trả lời có trích dẫn `[S1]`; bấm vào mở popup ảnh trang PDF cùng văn bản OCR với đoạn được trích tô vàng. Câu đầu tiên chậm hơn vì nạp model (≈ 20-60 giây). Dừng bằng Ctrl+C.
+
+**Thư viện tài liệu** (cột trái): tích/bỏ tích để chọn tài liệu dùng khi trả lời (lưu trong trình duyệt); bấm tên để xem tài liệu từng trang; ✕ để xóa (xóa chỉ mục, cache OCR, bản tải lên; file tự chép vào `data/raw/` được giữ lại nên `app.ingest` sau sẽ nạp lại); kéo mép phải để đổi độ rộng; nút **Thư viện** trên header để ẩn/hiện. **Cài đặt** có chọn model, phong cách trả lời và cỡ chữ.
 
 ## 8. Tự khởi động cùng máy (launchd)
 
-Tạo file dịch vụ (thay `TENMAY` bằng tên người dùng macOS, kiểm tra bằng `whoami`):
+Thay `TENMAY` bằng tên người dùng macOS (`whoami`):
 
 ```bash
 mkdir -p ~/Library/LaunchAgents
@@ -223,99 +195,76 @@ EOF
 launchctl load ~/Library/LaunchAgents/com.banking-rag.api.plist
 ```
 
-`caffeinate -is` giữ máy không ngủ khi dịch vụ đang chạy. Cũng nên vào **System Settings → Battery → Options** (macOS 14) bật "Prevent automatic sleeping on power adapter when the display is off" và cắm sạc thường trực, nếu không máy ngủ thì web ngừng.
-
-Lệnh quản lý:
+`caffeinate -is` giữ máy không ngủ khi dịch vụ chạy. Vào **System Settings → Battery → Options** bật "Prevent automatic sleeping on power adapter when the display is off" và cắm sạc thường trực, nếu không máy ngủ thì web ngừng. Dịch vụ chạy khi người dùng đăng nhập; bật tự đăng nhập hoặc để máy luôn đăng nhập.
 
 ```bash
-launchctl list | grep banking-rag      # đang chạy chưa
-tail -f ~/apps/banking-rag/data/api.log   # xem nhật ký
-launchctl unload ~/Library/LaunchAgents/com.banking-rag.api.plist   # dừng
+launchctl list | grep banking-rag                                     # đang chạy chưa
+tail -f ~/apps/banking-rag/data/api.log                               # nhật ký
+launchctl unload ~/Library/LaunchAgents/com.banking-rag.api.plist     # dừng (load để chạy lại)
 ```
-
-Dịch vụ này chạy khi người dùng đăng nhập macOS. Bật tự đăng nhập hoặc để máy luôn ở trạng thái đã đăng nhập.
 
 ## 9. Cho người dùng truy cập
 
-Chỉ làm bước này sau khi đặt mật khẩu.
-
-**9.1. Đặt mật khẩu (bắt buộc nếu ra internet)**
-
-Trong `.env`:
+Chỉ làm sau khi đặt mật khẩu. Trong `.env`:
 
 ```ini
 APP_USER=admin
 APP_PASSWORD=mat-khau-dai-kho-doan
-APP_SECRET=chuoi-ngau-nhien-dai
+APP_SECRET=chuoi-ngau-nhien-dai      # python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 TRUST_PROXY=1
 ALLOW_CUSTOM_ENDPOINTS=0
 ```
 
-Sinh chuỗi ngẫu nhiên: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. Sau đó khởi động lại dịch vụ:
+Rồi khởi động lại dịch vụ (`unload` rồi `load`). Để trống `APP_PASSWORD` thì **ai có link đều xem và xóa được tài liệu, tải lên, và tiêu tốn khóa OpenAI của khách**.
 
-```bash
-launchctl unload ~/Library/LaunchAgents/com.banking-rag.api.plist
-launchctl load ~/Library/LaunchAgents/com.banking-rag.api.plist
-```
+- **Mạng nội bộ:** đổi `--host 127.0.0.1` thành `--host 0.0.0.0` trong plist; người cùng mạng vào `http://<IP-Mac>:8080`. Không đặt mật khẩu thì chỉ dùng trong mạng tin cậy.
+- **Công khai qua Tailscale Funnel** (miễn phí, HTTPS, `https://<máy>.<tailnet>.ts.net`):
 
-Nếu để trống `APP_PASSWORD`, **bất kỳ ai có link đều xem được tài liệu, tải tài liệu lên và tiêu tốn khóa OpenAI của khách**.
+  ```bash
+  brew install --cask tailscale
+  ```
 
-**9.2. Chỉ dùng trong mạng nội bộ:** người trong cùng mạng truy cập `http://<IP-Mac>:8080`. Khi đó đổi `--host 127.0.0.1` thành `--host 0.0.0.0` trong file plist. Không đặt mật khẩu thì chỉ nên dùng cách này trong mạng tin cậy.
+  Mở ứng dụng Tailscale, đăng nhập; trong trang quản trị (login.tailscale.com/admin) bật **HTTPS Certificates** và **Funnel** cho máy này. Sau đó:
 
-**9.3. Công khai qua Tailscale Funnel** (miễn phí, có HTTPS, địa chỉ dạng `https://<máy>.<tailnet>.ts.net`):
+  ```bash
+  tailscale funnel --bg 8080
+  tailscale funnel status
+  ```
 
-```bash
-brew install --cask tailscale
-```
+  Cổng 443 đã bận thì dùng `tailscale funnel --bg --https=10000 8080`. Tắt: `tailscale funnel reset`. Nếu không có lệnh `tailscale`, dùng `/Applications/Tailscale.app/Contents/MacOS/Tailscale`. **[chưa kiểm chứng]** trên macOS.
+- **Địa chỉ ngắn `*.workers.dev`:** xem `deploy/worker/` trong README (Worker chuyển tiếp tới địa chỉ Funnel). Lỗi `525` ở địa chỉ này thường chỉ là lỗi thoáng qua của Funnel; thử lại sau ít phút.
 
-Mở ứng dụng Tailscale, đăng nhập. Vào trang quản trị (login.tailscale.com/admin), bật **HTTPS Certificates** và cho phép **Funnel** cho máy này. Sau đó:
-
-```bash
-tailscale funnel --bg 8080
-tailscale funnel status
-```
-
-Địa chỉ in ra là địa chỉ công khai. Nếu cổng 443 của máy đã dùng cho dịch vụ khác, dùng `tailscale funnel --bg --https=10000 8080`. Tắt công khai: `tailscale funnel reset`.
-
-Nếu lệnh `tailscale` không có trong PATH, dùng `/Applications/Tailscale.app/Contents/MacOS/Tailscale`. **[chưa kiểm chứng]** trên macOS.
-
-Giao diện và API cùng một địa chỉ, nên không cần dịch vụ host riêng.
+Giao diện và API cùng một địa chỉ nên không cần host riêng.
 
 ## 10. Vận hành
 
-**Cập nhật phiên bản mới**
-
-```bash
-cd ~/apps/banking-rag && git pull
-uv pip install --python .venv/bin/python -r requirements.txt
-launchctl unload ~/Library/LaunchAgents/com.banking-rag.api.plist
-launchctl load ~/Library/LaunchAgents/com.banking-rag.api.plist
-```
-
-**Sao lưu:** copy thư mục `data/` (chứa `rag.db`, PDF gốc, cache OCR) và file `.env`. Dừng dịch vụ trước khi copy để cơ sở dữ liệu không bị ghi dở.
-
-**Đổi model chat:** vào **Cài đặt** trên giao diện, chọn model. Danh sách lấy từ `OPENAI_CHAT_MODEL` trong `.env`. Hai bản mini đạt 13/14 trên bộ đánh giá nội bộ.
-
-**Chi phí OpenAI:** mỗi câu hỏi nghiệp vụ gửi khoảng 3,5–3,7 nghìn token đầu vào và vài trăm token trả lời. Số token từng câu hiện dưới câu trả lời. Đặt giới hạn chi tiêu trong tài khoản OpenAI của khách.
+- **Cập nhật:** `cd ~/apps/banking-rag && git pull`, `uv pip install --python .venv/bin/python -r requirements.txt`, rồi `unload`/`load` dịch vụ. File tĩnh (`web/`) chỉ cần tải lại trang.
+- **Sao lưu:** dừng dịch vụ, copy `data/` (`rag.db`, PDF, cache OCR) và `.env`.
+- **Đổi model chat:** **Cài đặt** trên giao diện; danh sách lấy từ `OPENAI_CHAT_MODEL`.
+- **Chi phí:** mỗi câu hỏi gửi khoảng 3,5-3,7 nghìn token vào và vài trăm token ra; số token hiện dưới câu trả lời. Đặt giới hạn chi tiêu trong tài khoản OpenAI của khách.
 
 ## 11. Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
 | --- | --- |
-| `MPS backend out of memory` hoặc máy rất chậm, treo | Đóng ứng dụng khác. Đặt `RAG_DEVICE=cpu` rồi khởi động lại. Không chạy OCR MinerU cùng API. |
-| Câu hỏi đầu tiên rất chậm | Bình thường: nạp model lần đầu (≈ 20–60 giây). Các câu sau nhanh hơn. |
-| `Sai hoặc thiếu API key` | Kiểm tra `OPENAI_API_KEY` trong `.env`, không có khoảng trắng hay dấu ngoặc thừa. Khởi động lại dịch vụ. |
-| Chat chỉ thấy Gemini/OpenAI nhưng không có model | Mục `OPENAI_CHAT_MODEL` sai tên model. |
-| `Model phản hồi quá lâu` | Mạng chậm hoặc OpenAI quá tải. Tăng `LLM_TIMEOUT` (mặc định 15 giây) lên 30. |
-| Trả lời "Em chưa tìm được căn cứ đủ chắc" | Hệ thống từ chối trả lời khi câu trả lời không qua kiểm tra (thiếu trích dẫn hoặc số liệu không có trong nguồn). Hỏi cụ thể hơn, nêu số hiệu văn bản. |
-| Tài liệu tải lên mắc ở trạng thái "đang xử lý" | Xem `data/api.log`. Thường do OCR lỗi (thiếu `GEMINI_API_KEY`) hoặc hết RAM. |
-| Không vào được từ máy khác | Dịch vụ đang nghe `127.0.0.1`. Xem mục 9. |
-| `launchctl load` báo lỗi | Kiểm tra đường dẫn trong file plist đúng và `whoami` khớp. Xem `data/api.log`. |
+| `Torch not compiled with CUDA enabled` | `.env` còn `RAG_DEVICE=cuda`. Sửa thành `mps` (`sed -i '' 's/^RAG_DEVICE=.*/RAG_DEVICE=mps/' .env`) và chạy lại. |
+| `segmentation fault` ở `Loading weights` (MinerU) | Dùng bản mã mới nhất (nạp model lên CPU rồi chuyển `mps`); nếu vẫn lỗi, OCR bằng Gemini hoặc ở máy khác. |
+| OCR "treo" nhiều giờ | MinerU trên Mac ≈ 7 phút mỗi trang, không phải treo. Dừng (Ctrl+C) và dùng mục 6. |
+| `MPS backend out of memory` hoặc máy rất chậm | Đóng ứng dụng khác; `RAG_DEVICE=cpu`; không chạy MinerU hoặc `app.ingest` cùng API. Xem Memory Pressure trong Activity Monitor. |
+| Câu hỏi đầu tiên rất chậm | Bình thường (nạp model 20-60 giây). Các câu sau nhanh hơn. |
+| Tài liệu kẹt ở trạng thái "đang xử lý" | Khởi động lại API: tài liệu dở dang tự làm tiếp. Thiếu file gốc thì chuyển "Lỗi", tải lại. Xem `data/api.log`. |
+| `Sai hoặc thiếu API key` | Kiểm tra `OPENAI_API_KEY` trong `.env`, không có khoảng trắng hay ngoặc thừa; khởi động lại. |
+| Chat không có model | `OPENAI_CHAT_MODEL` sai tên model. |
+| `Model phản hồi quá lâu` | Mạng chậm hoặc OpenAI quá tải; tăng `LLM_TIMEOUT` (mặc định 15) lên 30. |
+| "Em chưa tìm được căn cứ đủ chắc" | Câu trả lời không qua kiểm tra (thiếu trích dẫn, số không có trong nguồn). Hỏi cụ thể hơn, nêu số hiệu văn bản. Kiểm tra các tài liệu liên quan đang được tích. |
+| Bấm trích dẫn không mở được | Cập nhật bản mã mới (đã sửa lỗi header) và khởi động lại API. |
+| Không vào được từ máy khác | Dịch vụ đang nghe `127.0.0.1`; xem mục 9. |
+| `launchctl load` báo lỗi | Kiểm tra đường dẫn trong plist và `whoami`; xem `data/api.log`. |
 
-## 12. Lưu ý bảo mật cho khách
+## 12. Bảo mật
 
-- Khóa OpenAI/Gemini nằm trong `.env` trên máy. Ai truy cập được máy hoặc thư mục dự án đều đọc được. Bật FileVault và đặt mật khẩu đăng nhập macOS.
-- Nếu khóa từng bị gửi qua chat, email hoặc tài liệu, thu hồi và tạo khóa mới.
+- Khóa OpenAI/Gemini nằm trong `.env`; ai truy cập được máy hoặc thư mục dự án đều đọc được. Bật FileVault và đặt mật khẩu đăng nhập macOS.
+- Khóa từng bị gửi qua chat, email hoặc tài liệu thì thu hồi và tạo khóa mới.
 - Đặt `APP_PASSWORD` trước khi công khai. Giữ `ALLOW_CUSTOM_ENDPOINTS=0` trừ khi cần thật, vì bật nó cho phép người dùng đã đăng nhập khiến máy chủ gọi tới địa chỉ họ nhập.
-- Tài liệu OCR bằng Gemini được gửi sang Google. OpenAI nhận đoạn trích tài liệu liên quan đến mỗi câu hỏi.
-- Hệ thống chưa có tài khoản theo người dùng: ai biết mật khẩu đều xem được toàn bộ tài liệu.
+- OCR bằng Gemini gửi ảnh trang sang Google; OpenAI nhận đoạn trích liên quan đến mỗi câu hỏi.
+- Chưa có tài khoản theo người dùng: ai biết mật khẩu đều xem, tải lên và xóa được mọi tài liệu.

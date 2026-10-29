@@ -15,9 +15,9 @@ class VersionService:
     def __init__(self, store: Store, retriever: HybridRetriever, context_size: int):
         self._store, self._retriever, self._size = store, retriever, context_size
 
-    def plan(self, question: str, sources: list[dict]) -> tuple[list[dict], list[str], list[list[dict]]]:
-        """(sources with missing versions added, prompt label per source, version groups for the UI)."""
-        docs = self._store.ready_documents()
+    def plan(self, question: str, sources: list[dict], doc_ids: frozenset[str] | None = None) -> tuple[list[dict], list[str], list[list[dict]]]:
+        """(sources with missing versions added, prompt label per source, version groups for the UI). `doc_ids`: selected documents only."""
+        docs = [d for d in self._store.ready_documents() if doc_ids is None or d["id"] in doc_ids]
         asked = self._asked_groups(question, docs)
         sources = self._expand(question, sources, asked)
         present = {c["document_id"] for c in sources}

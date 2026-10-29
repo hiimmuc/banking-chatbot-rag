@@ -5,9 +5,17 @@ import { QUIPS, ROBOT, setRobot, trackPointer } from './robot.js';
 const EXAMPLES = ['Văn bản 1866 thay thế văn bản nào?', 'Cho vay ngắn hạn mua máy móc thiết bị tối đa bao nhiêu % giá trị hàng hóa?',
   'Lãi suất cho vay người dưới 35 tuổi mua nhà ở xã hội là bao nhiêu?'];
 const DOC_STATUS = {ready: 'Sẵn sàng', processing: 'Đang xử lý', failed: 'Lỗi'};
-const DOC_STAGE = {queued: 'chờ', extract: 'đọc/OCR', chunk: 'chia đoạn', embed: 'lập chỉ mục', done: ''};
+const STEP_LABEL = {extract: 'Đọc/OCR trang', chunk: 'Chia đoạn', embed: 'Lập chỉ mục đoạn'};
+// Overall bar: OCR is most of the work (0-80%), indexing the rest (80-100%).
+function progressOf(d) {
+  const frac = d.total ? Math.min(1, d.done / d.total) : 0;
+  const pct = d.stage === 'embed' ? 80 + 20 * frac : d.stage === 'extract' ? 80 * frac : 0;
+  const label = d.stage === 'queued' || !STEP_LABEL[d.stage] ? 'Đang chờ…'
+    : `${STEP_LABEL[d.stage]}${d.total ? ` ${d.done}/${d.total} · ${Math.round(100 * frac)}%` : '…'}`;
+  return {pct: Math.max(3, Math.round(pct)), label};
+}
 
-let cfg, settings, ctrl = null, busy = false, quip = 0, pollTimer = null, sourceOpener = null;
+let docs = null, cfg, settings, ctrl = null, busy = false, quip = 0, pollTimer = null, sourceOpener = null;
 const history = [];
 const messageSources = {};  // message index -> {S1: source}
 const root = document.documentElement;
@@ -50,7 +58,7 @@ function fillSettings() {
   $('#sProvider').innerHTML = Object.entries(cfg.providers).map(([k, v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('');
   $('#sProvider').value = settings.provider; fillModels();
   $('#sModel').value = settings.model; $('#sTokens').value = settings.max_output_tokens; $('#sTokens').max = cfg.max_output_tokens_cap;
-  $('#sStyle').value = settings.style; $('#sTemp').value = settings.temperature;
+  $('#sStyle').value = settings.style; $('#sFont').value = String(settings.fontScale); $('#sTemp').value = settings.temperature;
   fillEndpoints();
 }
 function fillEndpoints() {
@@ -86,30 +94,84 @@ $('#epList').onclick = async e => {
 };
 $('#epBox').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#epAdd').click(); } });
 $('#sProvider').onchange = fillModels;
+// Text size: a root multiplier, so every rem-based size follows. Preview while the dialog is open, revert on cancel.
+const applyFont = scale => document.documentElement.style.setProperty('--fs', scale);
+applyFont(load('settings', {}).fontScale ?? 1.125);
+$('#sFont').addEventListener('change', e => applyFont(+e.target.value));
+$('#settings').addEventListener('close', () => applyFont(settings.fontScale));
 $('#settingsBtn').onclick = () => { fillSettings(); $('#settings').showModal(); };
 $('#settingsForm').addEventListener('submit', e => {
   if (e.submitter?.value !== 'ok') return;
   settings = {provider: $('#sProvider').value, model: $('#sModel').value,
     max_output_tokens: Math.min(cfg.max_output_tokens_cap, Math.max(100, +$('#sTokens').value || 1200)),
-    style: $('#sStyle').value, temperature: Math.min(1, Math.max(0, +$('#sTemp').value || 0))};
+    style: $('#sStyle').value, fontScale: +$('#sFont').value || 1.125, temperature: Math.min(1, Math.max(0, +$('#sTemp').value || 0))};
   save('settings', settings);
 });
 
+// Sidebar width: drag the edge or use ← → on it; the width is remembered.
+const MIN_W = 240, MAX_W = 560;
+const setAsideW = w => { w = Math.min(MAX_W, Math.max(MIN_W, Math.round(w))); document.documentElement.style.setProperty('--aside-w', w + 'px'); $('#resizer').setAttribute('aria-valuenow', w); return w; };
+let asideW = setAsideW(load('aside.w', 360));
+$('#resizer').addEventListener('pointerdown', e => {
+  e.preventDefault(); $('#resizer').setPointerCapture(e.pointerId); $('#resizer').classList.add('drag');
+  const left = $('#app').getBoundingClientRect().left;
+  const move = ev => { asideW = setAsideW(ev.clientX - left); };
+  const stop = () => { $('#resizer').classList.remove('drag'); $('#resizer').removeEventListener('pointermove', move); $('#resizer').removeEventListener('pointerup', stop); save('aside.w', asideW); };
+  $('#resizer').addEventListener('pointermove', move); $('#resizer').addEventListener('pointerup', stop);
+});
+$('#resizer').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault(); asideW = setAsideW(asideW + (e.key === 'ArrowRight' ? 16 : -16)); save('aside.w', asideW);
+});
+
 // Documents
+// Documents the user switched off for this browser; new documents start selected.
+const extOf = d => (d.name.match(/\.(\w+)$/)?.[1] || 'file').toUpperCase();
+const unsel = new Set(load('docs.unselected', []));
+const saveSel = () => save('docs.unselected', [...unsel]);
+const selectedIds = () => docs && docs.filter(d => d.status === 'ready' && !unsel.has(d.id)).map(d => d.id);
+function showCount(err) {
+  const ready = docs ? docs.filter(d => d.status === 'ready').length : 0;
+  $('#docCount').textContent = err || (docs ? `Đang dùng ${selectedIds().length}/${ready} tài liệu` : '');
+  $('#docCount').classList.toggle('err', !!err);
+}
 async function refreshDocs() {
-  let docs;
   try { docs = await getJson('/api/documents'); }
   catch (x) {
     if (x instanceof AuthError) return; $('#docs').innerHTML = '<li class="doc"><span class="status err">Không tải được danh sách tài liệu.</span></li>'; return; }
-  $('#docs').innerHTML = docs.length ? docs.map(d => `<li class="doc">
-      <div class="t">${esc(d.title || d.name)}</div>
-      <div class="m">${esc(d.doc_no ? 'Số ' + d.doc_no : d.name)}${d.issued ? ' · ' + esc(d.issued) : ''}${d.pages ? ' · ' + d.pages + ' trang' : ''}
-        <span class="badge ${esc(d.status)}">${DOC_STATUS[d.status] || esc(d.status)}${d.status === 'processing' && DOC_STAGE[d.stage] ? ' (' + DOC_STAGE[d.stage] + ')' : ''}</span></div>
-      ${d.error ? `<div class="m err">${esc(d.error)}</div>` : ''}</li>`).join('')
-    : '<li class="doc"><span class="status">Chưa có tài liệu. Tải một tệp lên để bắt đầu.</span></li>';
+  for (const id of unsel) if (!docs.some(d => d.id === id)) unsel.delete(id);  // forget deleted documents
+  saveSel(); showCount();
+  $('#docs').innerHTML = docs.length ? docs.map(d => `<li class="doc ${esc(d.status)}${d.status === 'ready' && unsel.has(d.id) ? ' off' : ''}">
+      <input type="checkbox" class="pick" data-id="${esc(d.id)}" aria-label="Dùng tài liệu này khi trả lời"${d.status === 'ready' ? (unsel.has(d.id) ? '' : ' checked') : ' disabled'}>
+      <button type="button" class="open" data-id="${esc(d.id)}" title="${esc(d.title || d.name)}"><span class="ext">${esc(extOf(d))}</span><span class="tt">${esc(d.title || d.name)}</span></button>
+      <button type="button" class="del" data-id="${esc(d.id)}" aria-label="Xóa tài liệu" title="Xóa tài liệu">✕</button>
+      <div class="meta">${[d.doc_no && 'Số ' + esc(d.doc_no), d.issued && esc(d.issued), d.pages && d.pages + ' trang'].filter(Boolean).join(' • ')}${d.status === 'ready' ? '' : `${d.doc_no || d.issued || d.pages ? ' • ' : ''}<b class="st ${esc(d.status)}">${DOC_STATUS[d.status] || esc(d.status)}</b>`}</div>
+      ${d.status === 'processing' ? (p => `<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.pct}" aria-label="Tiến trình xử lý"><i style="width:${p.pct}%"></i></div><div class="pt">${esc(p.label)} · tổng ${p.pct}%</div>`)(progressOf(d)) : ''}
+      ${d.error ? `<div class="pt err">${esc(d.error)}</div>` : ''}</li>`).join('')
+    : '<li class="doc empty"><span class="status">Chưa có tài liệu. Tải một tệp lên để bắt đầu.</span></li>';
   clearTimeout(pollTimer);
-  if (docs.some(d => d.status === 'processing')) pollTimer = setTimeout(refreshDocs, 3000);
+  if (docs.some(d => d.status === 'processing')) pollTimer = setTimeout(refreshDocs, 1500);
 }
+$('#docs').addEventListener('change', e => {
+  const box = e.target.closest('.pick'); if (!box) return;
+  box.checked ? unsel.delete(box.dataset.id) : unsel.add(box.dataset.id);
+  saveSel(); showCount();
+});
+$('#docs').addEventListener('click', async e => {
+  const open = e.target.closest('.open');
+  if (open) return openDocument(docs.find(x => x.id === open.dataset.id));
+  const btn = e.target.closest('.del'); if (!btn) return;
+  const d = docs.find(x => x.id === btn.dataset.id);
+  if (!d || !confirm(`Xóa "${d.title || d.name}" khỏi hệ thống? Việc này không hoàn tác được.`)) return;
+  btn.disabled = true;
+  try {
+    const r = await api(`/api/documents/${encodeURIComponent(d.id)}`, {method: 'DELETE'});
+    if (!r.ok && r.status !== 404) throw new Error(`Lỗi máy chủ (${r.status})`);
+  } catch (x) { if (x instanceof AuthError) return; btn.disabled = false; return showCount(x.message); }
+  refreshDocs();
+});
+const selectAll = on => { for (const d of docs || []) on ? unsel.delete(d.id) : unsel.add(d.id); saveSel(); refreshDocs(); };
+$('#selAll').onclick = () => selectAll(true); $('#selNone').onclick = () => selectAll(false);
 $('#uploadBtn').onclick = () => $('#file').click();
 $('#file').onchange = async e => {
   const file = e.target.files[0]; e.target.value = '';
@@ -127,8 +189,12 @@ $('#file').onchange = async e => {
   $('#uploadBtn').disabled = false;
 };
 const pane = $('#docsPane');
-$('#docsBtn').onclick = () => { pane.classList.add('open'); $('#docsClose').focus(); };
-$('#docsClose').onclick = () => { pane.classList.remove('open'); $('#docsBtn').focus(); };
+// Narrow screens: the library is an overlay. Wide screens: it collapses to give the chat the full width.
+const narrow = matchMedia('(max-width:900px)');
+const setLibOff = on => { $('#app').classList.toggle('lib-off', on); $('#docsBtn').setAttribute('aria-expanded', String(!on)); save('lib.off', on); };
+setLibOff(load('lib.off', false));
+$('#docsBtn').onclick = () => narrow.matches ? (pane.classList.add('open'), $('#docsClose').focus()) : setLibOff(!$('#app').classList.contains('lib-off'));
+$('#docsClose').onclick = () => { if (narrow.matches) pane.classList.remove('open'); else setLibOff(true); $('#docsBtn').focus(); };
 
 // Chat view
 function renderEmpty() {
@@ -239,7 +305,7 @@ async function ask(question) {
   try {
     const r = await api('/api/chat', {method: 'POST', signal: ctrl.signal, headers: {'content-type': 'application/json'},
       body: JSON.stringify({messages: [...history, {role: 'user', content: question}], provider: settings.provider, model: settings.model,
-        max_output_tokens: settings.max_output_tokens, style: settings.style, temperature: settings.temperature})});
+        max_output_tokens: settings.max_output_tokens, style: settings.style, temperature: settings.temperature, document_ids: selectedIds()})});
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Yêu cầu bị từ chối');
     for await (const [event, data] of sseEvents(r)) {
       if (event === 'sources') { data.sources.forEach(s => { sources[s.id] = s; }); botEl.querySelector('.srcs').innerHTML = sourceButtons(data.sources); botEl.querySelector('.vers').innerHTML = versionBoxes(data.versions || []); }
@@ -267,6 +333,7 @@ $('#ask').addEventListener('submit', e => {
   e.preventDefault();
   const q = $('#q').value.trim();
   if (!q || busy) return;
+  if (docs?.some(d => d.status === 'ready') && !selectedIds().length) { showCount('Chọn ít nhất một tài liệu để hỏi.'); pane.classList.add('open'); return; }
   $('#q').value = ''; $('#q').style.height = 'auto'; ask(q);
 });
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#ask').requestSubmit(); } });
@@ -276,49 +343,72 @@ $('#q').addEventListener('input', e => {
 });
 $('#stop').onclick = () => { skipTyping = true; if (ctrl) ctrl.abort(); };
 
-// Source panel
-function renderChunk(text) {  // escapes, then turns pipe-tables into real tables
+// Source popup: page image beside the OCR text of that page, with the cited passage highlighted.
+const norm = t => t.toLowerCase().replace(/[|*#\s]+/g, ' ').trim();
+function renderChunk(text, mark = () => false) {  // escapes, then turns pipe-tables into real tables
   const out = []; let rows = [];
   const flush = () => {
-    if (rows.length) out.push('<div class="tw"><table>' + rows.map((r, i) => '<tr>' + r.map(c => `<${i ? 'td' : 'th'}>${esc(c)}</${i ? 'td' : 'th'}>`).join('') + '</tr>').join('') + '</table></div>');
+    if (rows.length) out.push('<div class="tw"><table>' + rows.map((r, i) => `<tr${r.hl ? ' class="hl"' : ''}>` + r.cells.map(c => `<${i ? 'td' : 'th'}>${esc(c)}</${i ? 'td' : 'th'}>`).join('') + '</tr>').join('') + '</table></div>');
     rows = [];
   };
   for (const line of text.split('\n')) {
     const t = line.trim();
-    if (t.startsWith('|')) { if (!/^\|[\s\-:|]+\|?$/.test(t)) rows.push(t.replace(/^\||\|$/g, '').split('|').map(c => c.trim())); }
-    else { flush(); if (t) out.push(`<p>${esc(line)}</p>`); }
+    if (t.startsWith('|')) { if (!/^\|[\s\-:|]+\|?$/.test(t)) rows.push({cells: t.replace(/^\||\|$/g, '').split('|').map(c => c.trim()), hl: mark(t)}); }
+    else { flush(); if (t) out.push(`<p${mark(t) ? ' class="hl"' : ''}>${esc(line)}</p>`); }
   }
   flush();
   return out.join('');
 }
+let srcSeq = 0;
+const blobToDataUrl = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
 function openSource(id) {
   sourceOpener = document.activeElement;
   const s = (messageSources[sourceOpener.closest('.msg')?.dataset.idx] || {})[id];
   if (!s) return;
+  openDialog(s, `${s.id} · ${s.docNo ? 'Số ' + s.docNo : ''}${s.issued ? ' · ngày ' + s.issued : ''}`);
+}
+// Library: the whole document, page by page, without a highlighted passage.
+function openDocument(d) {
+  if (!d) return;
+  sourceOpener = document.activeElement;
+  openDialog({documentId: d.id, fileName: d.title || d.name, pageStart: 1, pageEnd: Math.max(1, d.pages || 1), excerpt: ''},
+    [d.doc_no ? 'Số ' + d.doc_no : '', d.issued ? 'ngày ' + d.issued : '', d.name].filter(Boolean).join(' · '));
+}
+function openDialog(s, meta) {
   $('#srcTitle').textContent = s.fileName;
-  $('#srcMeta').textContent = `${s.id} · ${s.docNo ? 'Số ' + s.docNo : ''}${s.issued ? ' · ngày ' + s.issued : ''} · trang ${pageRange(s)}`;
-  $('#srcExcerpt').innerHTML = renderChunk(s.excerpt);
-  const isPdf = /\.pdf$/i.test(s.fileName);
-  $('#srcFrame').hidden = !isPdf;
-  $('#srcFrame').src = 'about:blank';
-  $('#source').hidden = false; $('#app').classList.add('with-source'); $('#srcClose').focus();
-  if (isPdf) showPdf(s);
+  $('#srcMeta').textContent = meta;
+  $('#source').showModal(); $('#srcClose').focus();
+  showPage(s, s.pageStart);
 }
-// The iframe cannot send an Authorization header, so it loads a short-lived signed link.
-async function showPdf(s) {
-  try {
-    const {url: link} = await getJson(`/api/documents/${encodeURIComponent(s.documentId)}/link`);
-    $('#srcFrame').src = `${url(link)}#page=${s.pageStart}`;
-  } catch { $('#srcExcerpt').insertAdjacentHTML('afterbegin', errorBox('Không mở được văn bản gốc.')); }
+async function showPage(s, n) {
+  const seq = ++srcSeq, base = `/api/documents/${encodeURIComponent(s.documentId)}/page/${n}`;
+  $('#srcPage').textContent = !s.excerpt ? `Trang ${n}/${s.pageEnd}` : `Trang ${n}${s.pageEnd !== s.pageStart ? ` (nguồn: ${pageRange(s)})` : ''}`;
+  $('#srcPrev').disabled = n <= s.pageStart; $('#srcNext').disabled = n >= s.pageEnd;
+  $('#srcPrev').onclick = () => showPage(s, n - 1); $('#srcNext').onclick = () => showPage(s, n + 1);
+  $('#srcText').innerHTML = '<span class="status">Đang tải…</span>'; $('#srcWrap').hidden = true;
+  const [text, img] = await Promise.allSettled([
+    getJson(base),
+    api(base + '/image').then(r => r.ok ? r.blob().then(blobToDataUrl) : Promise.reject(new Error('no image'))),
+  ]);
+  if (seq !== srcSeq) return;  // the user moved on to another page or closed the popup
+  const page = text.status === 'fulfilled' ? text.value.text : null;
+  const hay = norm(s.excerpt), cited = line => { const t = norm(line); return t.length >= 6 && hay.includes(t); };
+  const blocks = text.status === 'fulfilled' ? text.value.blocks : null;  // MinerU boxes, normalized 0-1
+  $('#srcBoxes').innerHTML = (blocks || []).filter(b => b.content && b.content.split('\n').some(cited))
+    .map(b => `<i style="left:${b.bbox[0] * 100}%;top:${b.bbox[1] * 100}%;width:${(b.bbox[2] - b.bbox[0]) * 100}%;height:${(b.bbox[3] - b.bbox[1]) * 100}%"></i>`).join('');
+  $('#srcText').innerHTML = page ? renderChunk(page, cited)
+    : errorBox('Không có văn bản OCR của trang này. Hiển thị đoạn được trích:') + renderChunk(s.excerpt);
+  $('#srcText').querySelector('.hl')?.scrollIntoView({block: 'center'});
+  if (img.status === 'fulfilled') { $('#srcImg').src = img.value; $('#srcWrap').hidden = false; }
 }
-function closeSource() {
-  $('#source').hidden = true; $('#app').classList.remove('with-source'); $('#srcFrame').src = 'about:blank';
-  if (sourceOpener) sourceOpener.focus();
-}
+function closeSource() { srcSeq++; $('#source').close(); $('#srcImg').removeAttribute('src'); }
 $('#srcClose').onclick = closeSource;
+$('#source').addEventListener('keydown', e => {  // ← → turn pages
+  if (e.target.closest('.excerpt, .pgimg') || e.target === $('#source')) { if (e.key === 'ArrowLeft') $('#srcPrev').click(); if (e.key === 'ArrowRight') $('#srcNext').click(); }
+});
+$('#source').addEventListener('close', () => { if (sourceOpener) sourceOpener.focus(); });
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || $('#settings').open) return;
-  if (!$('#source').hidden) closeSource(); else if (pane.classList.contains('open')) $('#docsClose').click();
+  if (e.key === 'Escape' && !$('#settings').open && $('#source').open === false && pane.classList.contains('open')) $('#docsClose').click();
 });
 
 // Login
@@ -346,7 +436,8 @@ async function start() {
   try { cfg = await getJson('/api/config'); }
   catch (x) { if (!(x instanceof AuthError)) $('#msgs').innerHTML = errorBox(x.message); return; }
   settings = {provider: cfg.default_provider, model: cfg.providers[cfg.default_provider].models[0],
-    max_output_tokens: 1200, style: 'friendly', temperature: 0.2, ...load('settings', {})};
+    max_output_tokens: 1200, style: 'friendly', temperature: 0.2, fontScale: 1.125, ...load('settings', {})};
+  applyFont(settings.fontScale);
   if (!cfg.providers[settings.provider]) Object.assign(settings, {provider: cfg.default_provider, model: cfg.providers[cfg.default_provider].models[0]});
   renderEmpty(); refreshDocs();
 }

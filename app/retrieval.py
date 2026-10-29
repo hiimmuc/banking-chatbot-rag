@@ -21,8 +21,9 @@ class HybridRetriever:
     def __init__(self, store: Store, embedder: Embedder, reranker: Reranker, params: RetrievalParams):
         self._store, self._embedder, self._reranker, self._p = store, embedder, reranker, params
 
-    def retrieve(self, question: str) -> list[dict]:
-        fused = fuse_rrf(self._keyword(question), self._vector(question))[: self._p.rerank_top_k]
+    def retrieve(self, question: str, doc_ids: frozenset[str] | None = None) -> list[dict]:
+        """`doc_ids` restricts the search to the documents the user selected (None = all)."""
+        fused = fuse_rrf(self._keyword(question, doc_ids), self._vector(question, doc_ids))[: self._p.rerank_top_k]
         found = self._store.get_chunks(fused)
         candidates = [found[i] for i in fused if i in found]
         if not candidates:
@@ -36,12 +37,15 @@ class HybridRetriever:
             chunk["score"] = score
         return sorted(chunks, key=lambda c: c["score"], reverse=True)
 
-    def _keyword(self, question: str) -> list[str]:
+    def _keyword(self, question: str, doc_ids) -> list[str]:
         match = fts_query(question)
-        return self._store.keyword_search(match, self._p.keyword_top_k) if match else []
+        return self._store.keyword_search(match, self._p.keyword_top_k, doc_ids) if match else []
 
-    def _vector(self, question: str) -> list[str]:
+    def _vector(self, question: str, doc_ids) -> list[str]:
         ids, matrix = self._store.ready_embeddings()
+        if doc_ids is not None:  # chunk ids are "<doc id>:<n>"
+            keep = [i for i, cid in enumerate(ids) if cid.rsplit(":", 1)[0] in doc_ids]
+            ids, matrix = [ids[i] for i in keep], matrix[keep]
         if not ids:
             return []
         sims = matrix @ self._embedder.encode([question])[0]

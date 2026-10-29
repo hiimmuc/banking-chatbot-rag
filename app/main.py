@@ -32,6 +32,7 @@ def _warm_models() -> None:
         try:
             c = get_container()
             c.retriever.retrieve("khởi động")
+            c.ingest.resume_interrupted()
         except Exception:
             logging.getLogger(__name__).exception("warm-up failed")
     threading.Thread(target=warm, daemon=True).start()

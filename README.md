@@ -22,22 +22,23 @@ Bản triển khai này chạy **local** (FastAPI + SQLite). Thiết kế gốc 
 
 ## Tính năng
 
-- Nạp PDF (kể cả bản scan), DOCX, TXT, PNG, JPG; tài liệu mới dùng được ngay, không cần khởi động lại.
+**Hỏi đáp**
 - Tìm kiếm lai: FTS5 (từ khóa, không dấu) + vector `bge-m3` → RRF → rerank `bge-reranker-v2-m3`.
-- Chat qua SSE. Mỗi câu trả lời có một chế độ: `answer`, `clarify` (hỏi lại), `insufficient` (chưa đủ căn cứ), `offscope` (ngoài phạm vi), `chitchat` (câu cố định). Server giữ câu trả lời đến khi qua kiểm tra rồi gửi một lần; giao diện hiện dần từng cụm chữ.
-- Ba phong cách trả lời trong Cài đặt: Tự nhiên & thân thiện (mặc định, xưng "em", gọi "anh/chị"), Ngắn gọn, Chi tiết. Câu nhiều ý trình bày bằng gạch đầu dòng, mỗi ý kèm nguồn.
-- Câu hỏi không phải tra cứu nghiệp vụ (trừ chào hỏi, giới thiệu) nhận câu cố định "Em chưa được thiết lập để trả lời câu hỏi này".
-- Mỗi câu trả lời hiện số token vào/ra khi model báo.
-- Tốc độ: ma trận embedding cache trong bộ nhớ, embedder và reranker nạp sẵn khi khởi động.
-- **Văn bản sửa đổi/thay thế:** khi câu hỏi liên quan một nhóm văn bản sửa đổi nhau (ví dụ 66 → 549 → 955 → 1866), hệ thống kéo thêm đoạn của các phiên bản bị bỏ sót, gắn nhãn `MỚI NHẤT`/`CŨ HƠN` cho model, yêu cầu kết luận theo bản mới nhất rồi nêu "Trước đây, …" để so sánh, và luôn hiện khung "Có nhiều phiên bản liên quan" (mới nhất trước, bấm mở từng bản) do server dựng, không phụ thuộc model.
-- Trích dẫn kiểm tra phía server: mã `[Sx]` không có trong danh sách nguồn không thành liên kết; bấm mở đoạn trích và PDF đúng trang.
-- Chốt chính xác: câu trả lời được giữ lại đến khi qua kiểm tra (trích dẫn hợp lệ, mọi số có trong nguồn, không còn chữ mẫu `<...>`). Không qua thì sinh lại một lần; vẫn không qua thì hệ thống nêu lý do và hỏi lại một câu cụ thể thay vì đưa câu trả lời chưa kiểm chứng.
-- Câu chào hỏi, cảm ơn, hỏi về trợ lý được trả lời cố định, không tra cứu. Có thể bật thêm model phân loại ý định (`INTENT_*`) để chặn câu ngoài phạm vi và câu quá chung chung.
-- Thêm endpoint chat riêng (vLLM/OpenAI-compatible) ngay trong Cài đặt khi `ALLOW_CUSTOM_ENDPOINTS=1`.
-- Nhiều nhà cung cấp chat qua một adapter OpenAI-compatible: Qwen (vLLM local), Gemini, OpenAI. Nhà cung cấp chưa có key tự ẩn khỏi giao diện; server kiểm tra allowlist.
-- OCR chọn được: MinerU (local, mặc định) hoặc Gemini (`OCR_BACKEND=gemini`).
-- Thương hiệu (tên tổ chức, logo, thông tin tác giả) đọc từ `.env`, repo không chứa danh tính; để trống thì hiện chỗ đặt logo trung tính.
-- Giao diện tối giản, sáng/tối, responsive, robot nón lá phản ứng theo trạng thái chat.
+- Chat qua SSE, mỗi câu trả lời có một chế độ: `answer`, `clarify` (hỏi lại), `insufficient` (chưa đủ căn cứ), `offscope` (ngoài phạm vi), `chitchat` (câu cố định). Server giữ câu trả lời đến khi qua kiểm tra rồi gửi một lần; giao diện hiện dần từng cụm chữ.
+- **Chốt chính xác:** trích dẫn hợp lệ, mọi số có trong nguồn, không còn chữ mẫu `<...>`. Không qua thì sinh lại một lần; vẫn không qua thì nêu lý do và hỏi lại một câu cụ thể thay vì đưa câu chưa kiểm chứng.
+- **Văn bản sửa đổi/thay thế** (ví dụ 66 → 549 → 955 → 1866): kéo thêm đoạn của các phiên bản bị bỏ sót, gắn nhãn `MỚI NHẤT`/`CŨ HƠN`, kết luận theo bản mới nhất rồi nêu "Trước đây, …"; khung "Có nhiều phiên bản liên quan" do server dựng, không phụ thuộc model.
+- Chào hỏi, cảm ơn, hỏi về trợ lý được trả lời cố định; câu ngoài nghiệp vụ nhận "Em chưa được thiết lập để trả lời câu hỏi này". Có thể bật model phân loại ý định (`INTENT_*`) để chặn câu ngoài phạm vi và câu quá chung.
+- Ba phong cách (Tự nhiên & thân thiện, Ngắn gọn, Chi tiết), số token vào/ra mỗi câu, cỡ chữ chỉnh được trong Cài đặt.
+- Nhiều nhà cung cấp chat qua một adapter OpenAI-compatible (Qwen vLLM local, Gemini, OpenAI); nhà cung cấp chưa có key tự ẩn; endpoint riêng thêm trong Cài đặt khi `ALLOW_CUSTOM_ENDPOINTS=1`.
+
+**Trích dẫn và thư viện tài liệu**
+- Mã `[Sx]` không có trong danh sách nguồn không thành liên kết. Bấm `[Sx]` mở popup: ảnh trang PDF bên trái, văn bản OCR của trang bên phải với đoạn được trích tô vàng; với OCR bằng MinerU còn vẽ khung vàng lên đúng khối chữ trên ảnh.
+- Thư viện tài liệu: tích/bỏ tích để chọn tài liệu dùng khi trả lời, bấm tên để xem tài liệu từng trang, xóa tài liệu (có xác nhận), kéo mép để đổi độ rộng, ẩn/hiện bằng nút **Thư viện**.
+- Tải lên: PDF (kể cả scan), DOCX, TXT, PNG, JPG; dùng được ngay, không cần khởi động lại. Thanh tiến trình theo từng bước (OCR theo trang, lập chỉ mục); tài liệu dở dang khi khởi động lại API tự được làm tiếp.
+
+**Vận hành**
+- OCR chọn được: MinerU (local, mặc định) hoặc Gemini (`OCR_BACKEND=gemini`). Chạy được trên NVIDIA (`cuda`), Apple Silicon (`mps`) và CPU.
+- Thương hiệu (tên tổ chức, logo, tác giả) đọc từ `.env`, repo không chứa danh tính. Giao diện sáng/tối, responsive, robot nón lá phản ứng theo trạng thái chat.
 
 ## Kiến trúc
 
@@ -105,7 +106,7 @@ Phụ thuộc đi một chiều: `api → services → (retrieval, store, embedd
 
 ## Cài đặt
 
-Máy Mac (M2 8 GB, chat qua OpenAI): xem [docs/SETUP-MAC.md](docs/SETUP-MAC.md).
+Máy Mac (Apple Silicon, chat qua OpenAI, `RAG_DEVICE=mps`): xem [docs/SETUP-MAC.md](docs/SETUP-MAC.md).
 
 ```bash
 # môi trường ứng dụng
@@ -145,7 +146,7 @@ Sao chép `.env.example` thành `.env` (đã nằm trong `.gitignore`, cùng `pr
 | `LLM_TIMEOUT` | `15` | Giây chờ model không trả byte nào thì báo lỗi "Model phản hồi quá lâu". Model lớn hoặc ở xa có thể cần tăng |
 | `ALLOW_CUSTOM_ENDPOINTS` | `0` | `1` cho phép thêm/xóa endpoint chat trong Cài đặt (lưu ở `data/endpoints.json`, mode 600). Server sẽ gọi URL được nhập, nên chỉ bật trong mạng tin cậy và nên đặt `APP_PASSWORD`. Chặn địa chỉ link-local/metadata; không theo redirect khi dò model |
 | `INTENT_BASE_URL`, `INTENT_MODEL`, `INTENT_API_KEY` | trống | Model nhỏ (OpenAI-compatible) gán nhãn `chitchat`/`out_of_scope`/`vague`/`domain` trước khi tìm kiếm. Trống thì chỉ dùng luật cố định. Lỗi model thì coi như `domain` |
-| `RAG_DEVICE` | `cuda` | `cpu` để chạy embedding/rerank không GPU |
+| `RAG_DEVICE` | `cuda` | `cuda` (NVIDIA), `mps` (Apple Silicon), `cpu`. Áp dụng cả cho OCR MinerU. Sai giá trị này là nguyên nhân thường gặp của lỗi `Torch not compiled with CUDA enabled` |
 | `EMBED_MODEL`, `RERANK_MODEL` | `BAAI/bge-m3`, `BAAI/bge-reranker-v2-m3` | Đổi embedding thì phải nạp lại |
 
 Tham số tìm kiếm (top-k) ở `config.RETRIEVAL`. Client chỉ chọn provider/model trong allowlist (kể cả endpoint đã thêm); key không bao giờ trả về client; `/api/config` chỉ trả tên, giới hạn và thương hiệu.
@@ -153,14 +154,21 @@ Tham số tìm kiếm (top-k) ở `config.RETRIEVAL`. Client chỉ chọn provid
 ## Chạy
 
 ```bash
-scripts/run_vllm.sh                                   # Qwen3.5-2B tại :8000
-.venv/bin/python scripts/render_pages.py              # PDF → PNG từng trang
-.venv-mineru/bin/python scripts/ocr_mineru.py data/ocr data/pages/*.png
-.venv/bin/python -m app.ingest data/raw               # chunk, embed, ghi SQLite
+scripts/run_vllm.sh                                   # Qwen3.5-2B tại :8000 (tùy chọn)
+.venv/bin/python -m app.ingest data/raw               # OCR (cache), chunk, embed, ghi SQLite
 .venv/bin/uvicorn app.main:app --port 8080            # mở http://localhost:8080
 ```
 
-Bước OCR chỉ cần một lần (cache ở `data/ocr/`, MinerU khoảng 30 giây mỗi trang). Tài liệu upload qua giao diện tự OCR bằng engine trong `OCR_BACKEND`.
+**Nạp tài liệu mới** (chọn một):
+
+| Cách | Lệnh |
+| --- | --- |
+| Giao diện | nút **Tải tài liệu lên** (≤ 20 MB, ≤ 200 tài liệu) |
+| Dòng lệnh | chép PDF vào `data/raw/`, chạy `.venv/bin/python -m app.ingest data/raw` |
+| `curl` | `curl -u admin:MATKHAU -F "file=@x.pdf" http://localhost:8080/api/documents` (bỏ `-u` nếu chưa đặt mật khẩu) |
+| Chép từ máy khác | OCR ở máy GPU, chép `data/ocr/*.md` (hoặc `data/rag.db`) sang, rồi `app.ingest` bỏ qua OCR |
+
+Tên file nên bắt đầu bằng mã văn bản (`66CNTI_...pdf`) vì mã này là ID; tên khác nhận ID băm. Ingest chạy lại an toàn: trang đã có cache `data/ocr/` không OCR lại (MinerU ≈ 30 giây mỗi trang trên RTX 4060), đoạn cũ bị thay chứ không nhân đôi. Tài liệu tải qua giao diện hoặc `curl` OCR bằng engine trong `OCR_BACKEND`. `scripts/ocr_mineru.py` có thể chạy riêng để OCR lại (ghi thêm `.json` toạ độ khung chữ cho popup).
 
 ## API
 
@@ -171,11 +179,14 @@ Bước OCR chỉ cần một lần (cache ở `data/ocr/`, MinerU khoảng 30 g
 | POST | `/api/login` | `{password}` → token phiên (12 giờ) |
 | GET | `/api/config` | Provider khả dụng và giới hạn (không lộ key/endpoint/đường dẫn) |
 | GET | `/api/brand/{slot}` | Logo cấu hình trong `.env` (`header`, `footer-light`, `footer-dark`) |
-| GET | `/api/documents` | Danh sách tài liệu và trạng thái |
+| GET | `/api/documents` | Danh sách tài liệu, trạng thái, bước đang chạy và tiến độ `done/total` |
 | POST | `/api/documents` | Upload (multipart `file`), trả `202`, nạp nền |
+| DELETE | `/api/documents/{id}` | Xóa chỉ mục, cache OCR và bản tải lên (`204`); file tự chép vào `data/raw/` được giữ |
+| GET | `/api/documents/{id}/page/{n}` | Văn bản OCR của trang `n` và toạ độ khung chữ nếu có (`text`, `blocks`) |
+| GET | `/api/documents/{id}/page/{n}/image` | Ảnh PNG của trang `n` (PDF dựng lại, ảnh trả nguyên bản) |
 | GET | `/api/documents/{id}/link` | URL ký sẵn, sống 10 phút, chỉ cho đúng tài liệu đó |
 | GET | `/api/documents/{id}/file` | File gốc, hỗ trợ range (cần token phiên hoặc link ký) |
-| POST | `/api/chat` | Hỏi đáp, trả SSE |
+| POST | `/api/chat` | Hỏi đáp, trả SSE. `document_ids` (tùy chọn) giới hạn tài liệu được tìm; bỏ trống là tìm tất cả |
 | POST / DELETE | `/api/endpoints`, `/api/endpoints/{key}` | Thêm/xóa endpoint chat (cần `ALLOW_CUSTOM_ENDPOINTS=1`) |
 
 Mọi route `/api` trừ `health`, `branding`, `login`, `brand/*` cần `Authorization: Bearer <token>` (hoặc Basic cho script). Sự kiện SSE theo thứ tự: `status`* → `sources`? → `mode` → `delta` → `done`, hoặc `error`. Câu trả lời được gửi một lần sau khi qua kiểm tra, không stream từng token.
@@ -209,13 +220,13 @@ Bộ câu hỏi nhỏ và prompt đã chỉnh theo nó, nên điểm có thể c
 
 Mật khẩu là **tùy chọn**: để trống `APP_PASSWORD` thì không có đăng nhập và ai tới được URL đều chat, upload, đọc tài liệu và tiêu tốn key OpenAI/Gemini. Chỉ nên để trống khi dịch vụ nằm trong localhost hoặc mạng riêng (tailnet); đặt mật khẩu trước khi mở URL công khai. Khi bật, hệ thống dùng một mật khẩu chung (không có tài khoản theo người dùng). Đã có sẵn:
 
-- Đăng nhập bằng mật khẩu → token ký HMAC (12 giờ, giữ trong `sessionStorage`). Giao diện tĩnh là công khai, mọi dữ liệu nằm sau token. File PDF mở qua link ký 10 phút gắn với đúng một tài liệu, vì `<iframe>` không gửi được header.
+- Đăng nhập bằng mật khẩu → token ký HMAC (12 giờ, giữ trong `sessionStorage`). Giao diện tĩnh là công khai, mọi dữ liệu nằm sau token. Popup tài liệu lấy văn bản và ảnh trang qua các route có token; link ký 10 phút gắn với đúng một tài liệu vẫn có cho `<iframe>`/`<a>` vì chúng không gửi được header.
 - Giới hạn tốc độ theo IP (chat 20/phút, upload 6/phút, đăng nhập 10/phút) và tối đa `MAX_DOCUMENTS` (200) tài liệu để upload công khai không làm đầy ổ đĩa;, chạy trước auth nên chặn dò mật khẩu. Bộ đếm nằm trong bộ nhớ, đủ cho một tiến trình.
 - CORS chỉ cho origin liệt kê trong `ALLOWED_ORIGINS`; CSP chặt (không `unsafe-inline`), `nosniff`, `no-referrer`, `no-store` cho API.
 - Upload: allowlist đuôi file, kiểm tra magic bytes, đọc tối đa 20 MB, tên file client không thành đường dẫn.
 - Key chỉ ở `.env` phía server; lỗi nhà cung cấp được rút gọn. Logo SVG bị từ chối. SQL tham số hóa, truy vấn FTS được escape, OCR gọi tiến trình con không qua shell.
 
-Chưa có: tài khoản theo người dùng, nhật ký kiểm toán, xóa tài liệu. HTTPS do Funnel/Cloudflare/proxy đảm nhiệm. Gemini OCR (`OCR_BACKEND=gemini`) gửi ảnh từng trang lên Google: chỉ bật khi chính sách dữ liệu cho phép.
+Khi chưa đặt mật khẩu, ai có link cũng xóa được tài liệu. Chưa có: tài khoản theo người dùng, nhật ký kiểm toán. HTTPS do Funnel/Cloudflare/proxy đảm nhiệm. Gemini OCR (`OCR_BACKEND=gemini`) gửi ảnh từng trang lên Google: chỉ bật khi chính sách dữ liệu cho phép.
 
 ## Triển khai
 
@@ -270,8 +281,9 @@ Kiểm tra sau triển khai: `curl https://<api>/api/health` (200), `/api/docume
 - Quan hệ sửa đổi suy ra từ tiêu đề: văn bản có "sửa đổi/điều chỉnh/gia hạn/bổ sung/thay thế" trong tiêu đề, ban hành sau và cùng chủ đề (độ trùng từ ≥ 0,6) với văn bản trước. Chưa đọc nội dung "thay thế văn bản số …" nên văn bản chỉ sửa một phần vẫn được coi là bản mới nhất của cả nhóm. Hệ thống không khẳng định văn bản nào còn hiệu lực.
 - Qwen 2B đôi khi vẫn đảo thứ tự cũ/mới trong câu trả lời (câu #7); khung phiên bản do server dựng luôn đúng thứ tự.
 - Khi câu trả lời không qua kiểm tra, hệ thống hỏi lại thay vì trả lời, nên số câu "hỏi lại" tăng với model yếu (eval: #7 giờ hỏi lại thay vì trả sai). Model phân loại ý định (`INTENT_*`) và endpoint tùy chỉnh mới kiểm thử bằng mock và vLLM local, chưa chạy với model thật khác.
-- Trích dẫn ở mức trang, chưa tô sáng vùng chữ. DOCX, ảnh chưa kiểm tra đầu-cuối.
-- Chưa có xóa tài liệu và đăng nhập theo người dùng. Gemini OCR đã có mã và kiểm thử bằng mock, chưa chạy với key thật.
+- Khung vàng trên ảnh trang chỉ có với OCR bằng MinerU và chỉ cho tài liệu OCR sau khi có tính năng này (cần chạy lại `ocr_mineru.py`); Gemini OCR và tài liệu cũ chỉ tô vàng ở văn bản. DOCX, ảnh chưa kiểm tra đầu-cuối.
+- MinerU trên Mac M2 8 GB chạy ≈ 7 phút mỗi trang (đo trên M2 8 GB): nên OCR ở máy GPU hoặc dùng Gemini, xem [docs/SETUP-MAC.md](docs/SETUP-MAC.md).
+- Chưa có đăng nhập theo người dùng; chọn tài liệu lưu theo trình duyệt, không theo tài khoản. Gemini OCR đã có mã và kiểm thử bằng mock, chưa chạy với key thật.
 
 ## Xử lý sự cố
 
@@ -285,4 +297,9 @@ Kiểm tra sau triển khai: `curl https://<api>/api/health` (200), `/api/docume
 | Eval báo `HTTP 401` | Server bật auth; đặt `APP_USER`, `APP_PASSWORD` trong môi trường. |
 | Gemini/OpenAI không hiện trong Cài đặt | Chưa có key trong `.env` (giá trị `your-*` bị bỏ qua). |
 | Giao diện báo `Không kết nối được máy chủ` (trước đây `Failed to fetch`) | Trình duyệt không tới được API: dịch vụ tắt, URL tunnel đã đổi/đã dừng, hoặc origin chưa nằm trong `ALLOWED_ORIGINS`. Kiểm tra `curl https://<api>/api/health`. |
-| Logo không hiện | Đường dẫn sai, hoặc không phải png/webp/jpg; xem cảnh báo `ignored` trong log. |
+| Logo không hiện | Đường dẫn sai, hoặc không phải png/webp/jpg; xem cảnh báo `ignored` trong log (`file private/brand/*` để kiểm tra). |
+| `Torch not compiled with CUDA enabled` (Mac) | `.env` còn `RAG_DEVICE=cuda`; đặt `mps` hoặc `cpu`. |
+| `segmentation fault` khi MinerU nạp trọng số trên Mac | Dùng bản mã mới nhất (nạp CPU rồi chuyển `mps`); hoặc OCR bằng Gemini/máy khác. |
+| Tài liệu kẹt "đang xử lý" | Khởi động lại API: tài liệu dở dang tự làm tiếp; thiếu file gốc thì chuyển "Lỗi". |
+| `Illegal header value b"frame-ancestors 'self' "` khi mở PDF | Lỗi cũ đã sửa; `git pull` và khởi động lại. |
+| Địa chỉ `*.workers.dev` báo `525` | Worker không bắt tay TLS được với Funnel; thường thoáng qua. Kiểm tra `curl https://<máy>.<tailnet>.ts.net/api/health` và biến `ORIGIN` của Worker. |

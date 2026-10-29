@@ -11,11 +11,11 @@ PARAMS = ChatParams("p", "m", 500, 0, "concise")
 
 
 class Retriever:
-    def retrieve(self, q): return [SRC]
+    def retrieve(self, q, doc_ids=None): return [SRC]
 
 
 class Versions:
-    def plan(self, q, sources): return sources, [""] * len(sources), []
+    def plan(self, q, sources, doc_ids=None): return sources, [""] * len(sources), []
 
 
 class Fake:

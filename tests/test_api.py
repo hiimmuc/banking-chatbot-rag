@@ -139,6 +139,24 @@ def test_file_csp_has_no_trailing_space_without_allowed_origins(monkeypatch, tmp
     assert c.get("/api/documents/doc4/file", auth=("u", "pw")).headers["content-security-policy"] == "frame-ancestors 'self'"
 
 
+def test_page_text_and_image_for_source_popup(client, monkeypatch, tmp_path):
+    import pymupdf
+    from app.container import get_container
+    monkeypatch.setattr(config, "OCR_DIR", tmp_path / "ocr"); (tmp_path / "ocr").mkdir()
+    (tmp_path / "ocr" / "pg1_p01.md").write_text("Lãi suất 8%", encoding="utf-8")
+    pdf = pymupdf.open(); pdf.new_page(); f = tmp_path / "a.pdf"; pdf.save(f)
+    get_container().store.upsert_document("pg1", "a.pdf", "a", "application/pdf", str(f))
+    assert client.get("/api/documents/pg1/page/1").json() == {"text": "Lãi suất 8%", "blocks": None}
+    (tmp_path / "ocr" / "pg1_p01.json").write_text('[{"bbox": [0.1, 0.2, 0.9, 0.3], "type": "text", "content": "Lãi suất 8%"}]', encoding="utf-8")
+    assert client.get("/api/documents/pg1/page/1").json()["blocks"][0]["bbox"] == [0.1, 0.2, 0.9, 0.3]
+    assert client.get("/api/documents/pg1/page/2").json() == {"text": None, "blocks": None}
+    img = client.get("/api/documents/pg1/page/1/image")
+    assert img.status_code == 200 and img.content.startswith(b"\x89PNG")
+    assert client.get("/api/documents/pg1/page/2/image").status_code == 404
+    assert client.get("/api/documents/nope/page/1").status_code == 404
+    assert client.get("/api/documents/..%2F..%2Fx/page/1").status_code == 404
+
+
 def test_cors_allows_only_listed_origins(monkeypatch):
     c = protected_client(monkeypatch, ALLOWED_ORIGINS=["https://ui.example.com"])
     ask = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type"}
@@ -176,3 +194,81 @@ def test_custom_endpoints_are_off_by_default_and_config_flags_it(client):
     assert client.get("/api/config").json()["customEndpoints"] is False
     assert client.post("/api/endpoints", json={"url": "127.0.0.1:8008", "models": ["m"]}).status_code == 403
     assert client.delete("/api/endpoints/ep-x").status_code == 403
+
+
+def _two_docs(store, tmp_path):
+    import numpy as np
+    from app.store import NewChunk
+    for i, d in enumerate(("da", "db")):
+        store.upsert_document(d, f"{d}.txt", d, "text/plain", str(tmp_path / f"{d}.txt"))
+        store.replace_chunks(d, [NewChunk("lai suat", None, 1, 1, np.eye(2, dtype="float32")[i].tobytes(), "lai suat")])
+        store.update_document(d, status="ready")
+
+
+def test_selected_documents_scope_keyword_and_vector_search(tmp_path):
+    from app.retrieval import HybridRetriever
+    from app.config import RetrievalParams
+    from app.store import Store
+
+    class Emb:
+        def encode(self, texts): import numpy as np; return np.array([[1.0, 1.0]], dtype="float32")
+
+    store = Store(tmp_path / "s.db"); _two_docs(store, tmp_path)
+    r = HybridRetriever(store, Emb(), None, RetrievalParams())
+    assert sorted(store.keyword_search("lai", 10)) == ["da:0", "db:0"]
+    assert store.keyword_search("lai", 10, frozenset({"db"})) == ["db:0"]
+    assert store.keyword_search("lai", 10, frozenset()) == []
+    assert r._vector("q", frozenset({"da"})) == ["da:0"] and r._vector("q", frozenset()) == []
+
+
+def test_delete_document_removes_index_and_derived_files(client, monkeypatch, tmp_path):
+    from app.container import get_container
+    ocr, up = tmp_path / "ocr", tmp_path / "up"; ocr.mkdir(); up.mkdir()
+    monkeypatch.setattr(config, "OCR_DIR", ocr); monkeypatch.setattr(config, "PAGES_DIR", tmp_path / "pages"); monkeypatch.setattr(config, "UPLOADS_DIR", up)
+    store = get_container().store
+    (ocr / "dx_p01.md").write_text("x"); (ocr / "dxy_p01.md").write_text("keep"); (up / "dx_a.txt").write_text("x")
+    store.upsert_document("dx", "a.txt", "a", "text/plain", str(up / "dx_a.txt"))
+    assert client.delete("/api/documents/dx").status_code == 204
+    assert store.get_document("dx") is None
+    assert not (ocr / "dx_p01.md").exists() and not (up / "dx_a.txt").exists() and (ocr / "dxy_p01.md").exists()
+    assert client.delete("/api/documents/dx").status_code == 404
+
+
+def test_ocr_runner_reports_pages_done(tmp_path):
+    from app.extract import OcrRunner
+
+    class Engine:
+        def run(self, pngs, out_dir):
+            for p in pngs: (out_dir / f"{p.stem}.md").write_text("x")
+
+    (tmp_path / "ocr").mkdir()
+    seen = []
+    OcrRunner(Engine(), tmp_path / "ocr", tmp_path / "pages").pages("d1", 3, lambda n, png: png.write_bytes(b""), lambda d, t: seen.append((d, t)))
+    assert seen[0] == (0, 3) and seen[-1] == (3, 3)
+
+
+def test_store_adds_progress_columns_to_an_old_database(tmp_path):
+    import sqlite3
+    from app.store import Store
+    old = sqlite3.connect(tmp_path / "old.db")
+    old.execute("CREATE TABLE documents (id TEXT PRIMARY KEY, name TEXT NOT NULL, title TEXT, doc_no TEXT, issued TEXT, mime TEXT NOT NULL, "
+                "file_path TEXT NOT NULL, pages INTEGER DEFAULT 0, status TEXT NOT NULL DEFAULT 'processing', stage TEXT NOT NULL DEFAULT 'queued', "
+                "error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+    old.execute("INSERT INTO documents(id,name,mime,file_path) VALUES('a','a','text/plain','a')"); old.commit(); old.close()
+    store = Store(tmp_path / "old.db")
+    store.set_progress("a", 2, 5)
+    assert (store.get_document("a")["done"], store.get_document("a")["total"]) == (2, 5)
+
+
+def test_resume_interrupted_finishes_processing_documents(tmp_path):
+    from app.ingest import IngestService
+    from app.store import Store
+    store = Store(tmp_path / "r.db")
+    (tmp_path / "a.txt").write_text("x")
+    store.upsert_document("a", "a.txt", "a", "text/plain", str(tmp_path / "a.txt"))
+    store.upsert_document("gone", "g.txt", "g", "text/plain", str(tmp_path / "g.txt"))
+    svc = IngestService(store, None, None); seen = []
+    svc.ingest_file = lambda path, mime, doc_id: seen.append((path.name, mime, doc_id))
+    svc.resume_interrupted()
+    assert seen == [("a.txt", "text/plain", "a")]
+    assert store.get_document("gone")["status"] == "failed"
