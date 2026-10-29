@@ -28,7 +28,7 @@ class SecurityHeaders:
                     headers[name] = value
                 if FILE_PATH.match(path):  # a separately hosted UI embeds this in its source panel
                     del headers["X-Frame-Options"]
-                    headers["Content-Security-Policy"] = "frame-ancestors 'self' " + " ".join(self._framers)
+                    headers["Content-Security-Policy"] = " ".join(["frame-ancestors 'self'", *self._framers])
                 if path.startswith("/api/") and not path.startswith("/api/brand/"):
                     headers["Cache-Control"] = "no-store"
                 if headers.get("content-type", "").startswith("text/html"):

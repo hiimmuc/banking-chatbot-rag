@@ -131,6 +131,14 @@ def test_file_responses_can_be_framed_only_by_allowed_origins(monkeypatch, tmp_p
     assert c.get("/api/health").headers["x-frame-options"] == "SAMEORIGIN"
 
 
+def test_file_csp_has_no_trailing_space_without_allowed_origins(monkeypatch, tmp_path):
+    from app.container import get_container
+    c = protected_client(monkeypatch)
+    f = tmp_path / "a.txt"; f.write_text("x")
+    get_container().store.upsert_document("doc4", "a.txt", "a", "text/plain", str(f))
+    assert c.get("/api/documents/doc4/file", auth=("u", "pw")).headers["content-security-policy"] == "frame-ancestors 'self'"
+
+
 def test_cors_allows_only_listed_origins(monkeypatch):
     c = protected_client(monkeypatch, ALLOWED_ORIGINS=["https://ui.example.com"])
     ask = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type"}
